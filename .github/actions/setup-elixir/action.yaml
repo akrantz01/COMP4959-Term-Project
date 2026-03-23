@@ -23,7 +23,7 @@ runs:
         path: |
           deps
           _build
-        key: ${{ runner.os }}-$mix-{{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}-${{ github.run_id }}
+        key: ${{ runner.os }}-mix-${{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}-${{ github.run_id }}
         restore-keys: |
           ${{ runner.os }}-mix-${{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}-
           ${{ runner.os }}-mix-${{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-
