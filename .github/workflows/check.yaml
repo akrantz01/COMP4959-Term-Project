@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+
+name: Check
+
+"on":
+  - push
+
+jobs:
+  compile:
+    name: Compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-elixir
+
+      - run: mix compile --warnings-as-errors
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-elixir
+
+      - run: mix format --check-formatted
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-elixir
+
+      - run: mix credo
+
+  unused-deps:
+    name: Unused Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-elixir
+
+      - run: mix deps.unlock --check-unused
