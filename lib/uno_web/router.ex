@@ -18,6 +18,7 @@ defmodule UnoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/room/:id", RoomLive
   end
 
   # Other scopes may use custom stacks.
