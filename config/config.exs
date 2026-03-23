@@ -52,16 +52,6 @@ config :tailwind,
     cd: Path.expand("..", __DIR__)
   ]
 
-config :git_hooks,
-  verbose: true,
-  hooks: [
-    pre_commit: [
-      tasks: [
-        {:mix_task, :precommit}
-      ]
-    ]
-  ]
-
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
