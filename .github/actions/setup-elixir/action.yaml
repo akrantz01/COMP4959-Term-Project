@@ -36,5 +36,7 @@ runs:
       shell: sh
 
     - name: Fetch dependencies
-      run: mix deps.get
+      run: |
+        mix deps.get
+        mix deps.compile
       shell: sh
