@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://www.schemastore.org/github-action.json
+
+name: Setup Elixir
+description: Sets up an Elixir runtime and dependenies
+
+inputs:
+  cache-discriminator:
+    description: A string to insert to distinguish Elixir caches
+    required: false
+    default: default
+
+runs:
+  using: composite
+  steps:
+    - uses: erlef/setup-beam@v1
+      id: beam
+      with:
+        version-file: .tool-versions
+        version-type: strict
+
+    - uses: actions/cache@v5
+      with:
+        path: |
+          deps
+          _build
+        key: ${{ runner.os }}-$mix-{{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}-${{ github.run_id }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('**/mix.lock') }}-
+          ${{ runner.os }}-mix-${{ inputs.cache-discriminator }}-otp_${{ steps.beam.outputs.otp-version }}-elixir_${{ steps.beam.outputs.elixir-version }}-
+
+    - name: Clear cache on retry
+      if: github.run_attempt != 1
+      run: |
+        mix deps.clean --all
+        mix clean
+      shell: sh
+
+    - name: Fetch dependencies
+      run: mix deps.get
+      shell: sh
