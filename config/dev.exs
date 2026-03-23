@@ -2,10 +2,10 @@ import Config
 
 # Configure your database
 config :uno, Uno.Repo,
-  username: "postgres",
-  password: "postgres",
-  hostname: "localhost",
-  database: "uno_dev",
+  username: System.get_env("DATABASE_USERNAME") || "uno",
+  password: System.get_env("DATABASE_PASSWORD") || "super-secure-password",
+  hostname: System.get_env("DATABASE_HOST") || "127.0.0.1",
+  database: System.get_env("DATABASE_NAME") || "uno_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
