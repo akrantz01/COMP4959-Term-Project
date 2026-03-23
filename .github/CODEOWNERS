@@ -1,0 +1,38 @@
+# Cross-team dependencies
+lib/uno/events.ex                       @err0l-g @brandonlma @baekanthony @Kairooe
+lib/uno_web/live/room_live.ex           @RamandeepKaurKainth @jhx88 @akrantz01 @SherryNinja10
+lib/uno_web/live/room_live.html.heex    @RamandeepKaurKainth @jhx88 @akrantz01 @SherryNinja10
+
+# Client - General
+assets/css/                                             @RamandeepKaurKainth @jhx88
+lib/uno_web/controllers/                                @RamandeepKaurKainth @jhx88
+lib/uno_web/components/                                 @RamandeepKaurKainth @jhx88
+lib/uno_web/live/room_live/lobby_component.ex           @RamandeepKaurKainth @jhx88
+lib/uno_web/live/room_live/lobby_component.html.heex    @RamandeepKaurKainth @jhx88
+lib/uno_web/live/room_live/lobby_component/             @RamandeepKaurKainth @jhx88
+
+# Client - Gameplay
+lib/uno_web/live/room_live/game_component.ex            @akrantz01 @SherryNinja10
+lib/uno_web/live/room_live/game_component.html.heex     @akrantz01 @SherryNinja10
+lib/uno_web/live/room_live/game_component/              @akrantz01 @SherryNinja10
+
+# Room
+lib/uno/room.ex     @err0l-g @brandonlma
+lib/uno/room/       @err0l-g @brandonlma
+
+# Game - Server
+lib/game/server.ex  @baekanthony @Kairooe
+lib/game/server/    @baekanthony @Kairooe
+
+# Game - Logic
+lib/game/logic.ex   @whatinthepeta @SehajGill23 @dalel-aibyn
+lib/game/logic/     @whatinthepeta @SehajGill23 @dalel-aibyn
+
+# Infrastructure
+.github/                    @akrantz01
+config/                     @akrantz01
+lib/uno/application.ex      @akrantz01
+lib/uno_web/endpoint.ex     @akrantz01
+lib/uno_web/router.ex       @akrantz01
+lib/uno_web/telemetry.ex    @akrantz01
+mix.exs                     @akrantz01
