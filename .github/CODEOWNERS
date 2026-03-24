@@ -1,7 +1,7 @@
 # Cross-team dependencies
-lib/uno/events.ex                       @err0l-g @brandonlma @baekanthony @Kairooe
-lib/uno_web/live/room_live.ex           @RamandeepKaurKainth @jhx88 @akrantz01 @SherryNinja10
-lib/uno_web/live/room_live.html.heex    @RamandeepKaurKainth @jhx88 @akrantz01 @SherryNinja10
+lib/uno/events.ex                       @err0l-g @brandonlma @SherryNinja10 @baekanthony @Kairooe
+lib/uno_web/live/room_live.ex           @RamandeepKaurKainth @jhx88 @akrantz01
+lib/uno_web/live/room_live.html.heex    @RamandeepKaurKainth @jhx88 @akrantz01
 
 # Client - General
 assets/css/                                             @RamandeepKaurKainth @jhx88
@@ -12,13 +12,13 @@ lib/uno_web/live/room_live/lobby_component.html.heex    @RamandeepKaurKainth @jh
 lib/uno_web/live/room_live/lobby_component/             @RamandeepKaurKainth @jhx88
 
 # Client - Gameplay
-lib/uno_web/live/room_live/game_component.ex            @akrantz01 @SherryNinja10
-lib/uno_web/live/room_live/game_component.html.heex     @akrantz01 @SherryNinja10
-lib/uno_web/live/room_live/game_component/              @akrantz01 @SherryNinja10
+lib/uno_web/live/room_live/game_component.ex            @akrantz01
+lib/uno_web/live/room_live/game_component.html.heex     @akrantz01
+lib/uno_web/live/room_live/game_component/              @akrantz01
 
 # Room
-lib/uno/room.ex     @err0l-g @brandonlma
-lib/uno/room/       @err0l-g @brandonlma
+lib/uno/room.ex     @err0l-g @brandonlma @SherryNinja10
+lib/uno/room/       @err0l-g @brandonlma @SherryNinja10
 
 # Game - Server
 lib/game/server.ex  @baekanthony @Kairooe
