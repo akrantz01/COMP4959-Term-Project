@@ -86,6 +86,7 @@ defmodule UnoWeb do
       import Phoenix.HTML
       # Core UI components
       import UnoWeb.CoreComponents
+      import UnoWeb.CardComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS
