@@ -8,6 +8,8 @@ defmodule Uno.PubSub do
 
   def subscribe(topic), do: Phoenix.PubSub.subscribe(__MODULE__, topic_name(topic))
 
+  def unsubscribe(topic), do: Phoenix.PubSub.unsubscribe(__MODULE__, topic_name(topic))
+
   def broadcast(topic, message),
     do: Phoenix.PubSub.broadcast(__MODULE__, topic_name(topic), message)
 
