@@ -137,6 +137,10 @@
               label="Colour"
               prompt="Select..."
               options={PublishEventForm.colour_options()}
+              disabled={
+                @publish_event_type == "cards_drawn" and
+                  @publish_card_builder_form[:type].value in ~w(wild wild_draw_4)
+              }
             />
             <div class="mt-3 self-center">
               <.button type="button" phx-click="add-card">Add</.button>

@@ -220,7 +220,24 @@ defmodule UnoWeb.DevtoolsLiveTest do
       }
     end
 
-    test "publishes CardsDrawn with wild cards", %{conn: conn} do
+    test "publishes CardsPlayed with wild card and colour", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_played")
+
+      add_card(view, "blue", "wild_draw_4")
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsPlayed{
+        player_id: "p1",
+        played_cards: [{:wild_draw_4, :blue}],
+        hand: %{}
+      }
+    end
+
+    test "publishes CardsDrawn with wild cards stripped of colour", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/dev/tools")
 
       subscribe_to_game(view, "testgame")

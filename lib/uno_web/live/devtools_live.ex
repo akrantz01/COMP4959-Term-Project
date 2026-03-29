@@ -87,7 +87,8 @@ defmodule UnoWeb.DevtoolsLive do
 
     socket =
       if cb_params = params["card_builder"] do
-        cb_changeset = %{CardBuilderForm.changeset(cb_params) | action: :validate}
+        mode = card_builder_mode(event_type)
+        cb_changeset = %{CardBuilderForm.changeset(cb_params, mode) | action: :validate}
         assign(socket, publish_card_builder_form: CardBuilderForm.to_form(cb_changeset))
       else
         socket
@@ -151,12 +152,14 @@ defmodule UnoWeb.DevtoolsLive do
   # --- Card builder ---
 
   def handle_event("add-card", _params, socket) do
+    mode = card_builder_mode(socket.assigns.publish_event_type)
+
     case Ecto.Changeset.apply_action(socket.assigns.publish_card_builder_form.source, :insert) do
       {:ok, card} ->
         {:noreply,
          assign(socket,
            publish_card_list: socket.assigns.publish_card_list ++ [card],
-           publish_card_builder_form: CardBuilderForm.new()
+           publish_card_builder_form: CardBuilderForm.new(mode)
          )}
 
       {:error, changeset} ->
@@ -264,9 +267,12 @@ defmodule UnoWeb.DevtoolsLive do
   defp validate_card_list(_, _), do: :ok
 
   defp card_builder_for(type) when type in ~w(cards_played cards_drawn),
-    do: CardBuilderForm.new()
+    do: CardBuilderForm.new(card_builder_mode(type))
 
   defp card_builder_for(_), do: nil
+
+  defp card_builder_mode("cards_drawn"), do: :drawn
+  defp card_builder_mode(_), do: :played
 
   defp hand_entry_builder_for(type) when type in ~w(cards_played cards_drawn),
     do: HandEntryBuilderForm.new()
