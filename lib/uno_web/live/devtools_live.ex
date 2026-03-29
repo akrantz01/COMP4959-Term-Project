@@ -212,10 +212,15 @@ defmodule UnoWeb.DevtoolsLive do
   defp card_builder_for(_), do: nil
 
   defp insert_event(socket, source, event) do
-    stream_insert(socket, :events, %{
-      id: Nanoid.generate(),
-      source: source,
-      content: inspect(event, pretty: true, width: 0)
-    })
+    stream_insert(
+      socket,
+      :events,
+      %{
+        id: Nanoid.generate(),
+        source: source,
+        content: inspect(event, pretty: true, width: 0)
+      },
+      at: 0
+    )
   end
 end
