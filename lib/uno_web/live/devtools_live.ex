@@ -1,6 +1,7 @@
 defmodule UnoWeb.DevtoolsLive do
   use UnoWeb, :live_view
 
+  alias Uno.Events
   alias Uno.PubSub
 
   alias UnoWeb.Forms.{PublishEventForm, SubscriptionForm}
@@ -19,7 +20,8 @@ defmodule UnoWeb.DevtoolsLive do
        publish_form: nil,
        publish_card_list: [],
        publish_card_builder_form: nil
-     )}
+     )
+     |> stream(:events, [], reset: true)}
   end
 
   # --- Subscription events ---
@@ -144,6 +146,29 @@ defmodule UnoWeb.DevtoolsLive do
      assign(socket, publish_card_list: List.delete_at(socket.assigns.publish_card_list, index))}
   end
 
+  # --- Pub/sub event receivers ---
+
+  def handle_info(%Events.PlayerJoined{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Room", msg)}
+
+  def handle_info(%Events.PlayerLeft{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Room", msg)}
+
+  def handle_info(%Events.GameStarted{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Room", msg)}
+
+  def handle_info(%Events.GameEnded{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Room", msg)}
+
+  def handle_info(%Events.NextTurn{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Game", msg)}
+
+  def handle_info(%Events.CardsPlayed{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Game", msg)}
+
+  def handle_info(%Events.CardsDrawn{} = msg, socket),
+    do: {:noreply, insert_event(socket, "Game", msg)}
+
   # --- Private helpers ---
 
   defp sync_subscriptions(old, new) do
@@ -184,4 +209,12 @@ defmodule UnoWeb.DevtoolsLive do
     do: CardBuilderForm.new()
 
   defp card_builder_for(_), do: nil
+
+  defp insert_event(socket, source, event) do
+    stream_insert(socket, :events, %{
+      id: Nanoid.generate(),
+      source: source,
+      content: inspect(event, pretty: true, width: 0)
+    })
+  end
 end

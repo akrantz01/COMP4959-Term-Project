@@ -168,5 +168,14 @@
         <.button variant="primary" type="submit">Publish</.button>
       </.form>
     </section>
+
+    <section>
+      <.header>Events</.header>
+
+      <.table id="events" rows={@streams.events} row_id={fn {dom_id, _} -> dom_id end}>
+        <:col :let={{_, event}} label="Source">{event.source}</:col>
+        <:col :let={{_, event}} label="Content"><pre>{event.content}</pre></:col>
+      </.table>
+    </section>
   </main>
 </div>
