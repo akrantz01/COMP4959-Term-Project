@@ -40,6 +40,7 @@ defmodule UnoWeb.Router do
 
       live_dashboard "/dashboard", metrics: UnoWeb.Telemetry
       forward "/mailbox", Plug.Swoosh.MailboxPreview
+      live "/tools", UnoWeb.DevtoolsLive
     end
   end
 end

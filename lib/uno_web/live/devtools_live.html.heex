@@ -1,0 +1,32 @@
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+  <header class="md:flex md:items-center md:justify-between py-4">
+    <h2 class="text-2xl/7 font-bold sm:truncate sm:text-3xl sm:tracking-tight">
+      DevTools
+    </h2>
+  </header>
+
+  <main>
+    <section>
+      <.header>Subscription</.header>
+
+      <label for="subscription_id" class="label mb-1">ID</label>
+      <.form for={@subscribe_form} phx-change="subscribe-change" class="flex items-center gap-4">
+        <.input field={@subscribe_form[:id]} type="text" phx-debounce />
+        <.input
+          field={@subscribe_form[:room]}
+          type="checkbox"
+          label="Room"
+          class="checkbox"
+          phx-click={JS.toggle_class("checkbox-success")}
+        />
+        <.input
+          field={@subscribe_form[:game]}
+          type="checkbox"
+          label="Game"
+          class="checkbox"
+          phx-click={JS.toggle_class("checkbox-success")}
+        />
+      </.form>
+    </section>
+  </main>
+</div>
