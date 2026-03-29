@@ -165,6 +165,61 @@
           </p>
         </div>
 
+        <%!-- Hand builder (only for card events) --%>
+        <div
+          :if={@publish_hand_entry_builder_form}
+          class="border border-base-300 rounded-lg p-4 space-y-3"
+        >
+          <h4 class="font-semibold text-sm">Hand</h4>
+
+          <div class="flex gap-2">
+            <.input
+              field={@publish_hand_entry_builder_form[:type]}
+              type="select"
+              label="Type"
+              prompt="Select..."
+              options={PublishEventForm.card_type_options()}
+            />
+            <.input
+              field={@publish_hand_entry_builder_form[:colour]}
+              type="select"
+              label="Colour"
+              prompt="Select..."
+              options={PublishEventForm.colour_options()}
+              disabled={@publish_hand_entry_builder_form[:type].value in ~w(wild wild_draw_4)}
+            />
+            <.input
+              field={@publish_hand_entry_builder_form[:count]}
+              type="number"
+              label="Count"
+            />
+            <div class="mt-3 self-center">
+              <.button type="button" phx-click="add-hand-entry">Add</.button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <span
+              :for={{entry, i} <- Enum.with_index(@publish_hand_list)}
+              class="badge badge-lg gap-1"
+            >
+              {entry.colour} {entry.type} ×{entry.count}
+              <button
+                type="button"
+                phx-click="remove-hand-entry"
+                phx-value-index={i}
+                class="btn btn-xs btn-ghost"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+
+          <p :if={@publish_hand_list == []} class="text-sm text-base-content/50">
+            No hand cards added (hand will be empty)
+          </p>
+        </div>
+
         <.button variant="primary" type="submit">Publish</.button>
       </.form>
     </section>

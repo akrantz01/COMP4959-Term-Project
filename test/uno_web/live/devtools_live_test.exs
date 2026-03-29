@@ -250,6 +250,122 @@ defmodule UnoWeb.DevtoolsLiveTest do
     end
   end
 
+  describe "hand builder" do
+    test "selecting cards_played shows hand builder", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      html = select_event(view, "cards_played")
+
+      assert html =~ "Hand"
+    end
+
+    test "selecting player_joined does not show hand builder", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      html = select_event(view, "player_joined")
+
+      refute html =~ "No hand cards added"
+    end
+
+    test "adds and removes hand entries for CardsPlayed", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      select_event(view, "cards_played")
+
+      html = add_hand_entry(view, "red", "skip", 2)
+      assert html =~ "red skip"
+      assert html =~ "×2"
+
+      html = add_hand_entry(view, "blue", "3", 1)
+      assert html =~ "blue 3"
+
+      # Remove first entry
+      html =
+        view
+        |> element(~s(button[phx-click="remove-hand-entry"][phx-value-index="0"]))
+        |> render_click()
+
+      refute html =~ "red skip"
+      assert html =~ "blue 3"
+    end
+
+    test "publishes CardsPlayed with hand entries", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_played")
+
+      add_card(view, "red", "skip")
+      add_hand_entry(view, "blue", "3", 2)
+      add_hand_entry(view, "yellow", "7", 1)
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsPlayed{
+        player_id: "p1",
+        played_cards: [{:red, :skip}],
+        hand: %{{:blue, 3} => 2, {:yellow, 7} => 1}
+      }
+    end
+
+    test "publishes CardsDrawn with hand entries", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_drawn")
+
+      add_card(view, "green", "5")
+      add_hand_entry(view, "green", "5", 3)
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsDrawn{
+        player_id: "p1",
+        drawn_cards: [{:green, 5}],
+        hand: %{{:green, 5} => 3}
+      }
+    end
+
+    test "hand entries support wild cards without colour", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_played")
+
+      add_card(view, "red", "5")
+      add_hand_entry(view, "", "wild", 2)
+      add_hand_entry(view, "", "wild_draw_4", 1)
+      add_hand_entry(view, "blue", "3", 3)
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsPlayed{
+        player_id: "p1",
+        played_cards: [{:red, 5}],
+        hand: %{{:blue, 3} => 3, wild: 2, wild_draw_4: 1}
+      }
+    end
+
+    test "wild hand entries strip colour even if provided", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_played")
+
+      add_card(view, "red", "5")
+      add_hand_entry(view, "red", "wild", 1)
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsPlayed{
+        player_id: "p1",
+        played_cards: [{:red, 5}],
+        hand: %{wild: 1}
+      }
+    end
+  end
+
   describe "validation" do
     test "does not publish when no subscription is active", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/dev/tools")
@@ -323,6 +439,18 @@ defmodule UnoWeb.DevtoolsLiveTest do
     view
     |> form("form[phx-submit=publish-submit]", %{publish: params})
     |> render_submit()
+  end
+
+  defp add_hand_entry(view, colour, type, count) do
+    view
+    |> form("form[phx-submit=publish-submit]", %{
+      hand_entry_builder: %{colour: colour, type: type, count: count}
+    })
+    |> render_change()
+
+    view
+    |> element(~s(button[phx-click="add-hand-entry"]))
+    |> render_click()
   end
 
   defp add_card(view, colour, type) do

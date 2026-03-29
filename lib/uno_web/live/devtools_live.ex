@@ -5,7 +5,7 @@ defmodule UnoWeb.DevtoolsLive do
   alias Uno.PubSub
 
   alias UnoWeb.Forms.{PublishEventForm, SubscriptionForm}
-  alias UnoWeb.Forms.PublishEvent.{CardBuilderForm, EventSelectorForm}
+  alias UnoWeb.Forms.PublishEvent.{CardBuilderForm, EventSelectorForm, HandEntryBuilderForm}
 
   def mount(_params, _session, socket) do
     {:ok,
@@ -19,7 +19,9 @@ defmodule UnoWeb.DevtoolsLive do
        publish_selector_form: EventSelectorForm.new(),
        publish_form: nil,
        publish_card_list: [],
-       publish_card_builder_form: nil
+       publish_card_builder_form: nil,
+       publish_hand_list: [],
+       publish_hand_entry_builder_form: nil
      )
      |> stream(:events, [], reset: true)}
   end
@@ -63,7 +65,9 @@ defmodule UnoWeb.DevtoolsLive do
            publish_selector_form: EventSelectorForm.to_form(changeset),
            publish_form: PublishEventForm.new(event_type),
            publish_card_list: [],
-           publish_card_builder_form: card_builder_for(event_type)
+           publish_card_builder_form: card_builder_for(event_type),
+           publish_hand_list: [],
+           publish_hand_entry_builder_form: hand_entry_builder_for(event_type)
          )}
 
       {:error, changeset} ->
@@ -89,6 +93,17 @@ defmodule UnoWeb.DevtoolsLive do
         socket
       end
 
+    socket =
+      if heb_params = params["hand_entry_builder"] do
+        heb_changeset = %{HandEntryBuilderForm.changeset(heb_params) | action: :validate}
+
+        assign(socket,
+          publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(heb_changeset)
+        )
+      else
+        socket
+      end
+
     {:noreply, socket}
   end
 
@@ -103,7 +118,14 @@ defmodule UnoWeb.DevtoolsLive do
     with :ok <- validate_subscription(sub, topic_kind),
          :ok <- validate_card_list(event_type, card_list),
          {:ok, data} <- PublishEventForm.parse(event_type, params) do
-      event = PublishEventForm.build_event(event_type, data, card_list)
+      event =
+        PublishEventForm.build_event(
+          event_type,
+          data,
+          card_list,
+          socket.assigns.publish_hand_list
+        )
+
       PubSub.broadcast({topic_kind, sub.id}, event)
 
       {:noreply,
@@ -112,7 +134,9 @@ defmodule UnoWeb.DevtoolsLive do
        |> assign(
          publish_form: PublishEventForm.new(event_type),
          publish_card_list: [],
-         publish_card_builder_form: card_builder_for(event_type)
+         publish_card_builder_form: card_builder_for(event_type),
+         publish_hand_list: [],
+         publish_hand_entry_builder_form: hand_entry_builder_for(event_type)
        )}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -145,6 +169,37 @@ defmodule UnoWeb.DevtoolsLive do
 
     {:noreply,
      assign(socket, publish_card_list: List.delete_at(socket.assigns.publish_card_list, index))}
+  end
+
+  # --- Hand entry builder ---
+
+  def handle_event("add-hand-entry", _params, socket) do
+    case Ecto.Changeset.apply_action(
+           socket.assigns.publish_hand_entry_builder_form.source,
+           :insert
+         ) do
+      {:ok, entry} ->
+        {:noreply,
+         assign(socket,
+           publish_hand_list: socket.assigns.publish_hand_list ++ [entry],
+           publish_hand_entry_builder_form: HandEntryBuilderForm.new()
+         )}
+
+      {:error, changeset} ->
+        {:noreply,
+         assign(socket,
+           publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(changeset)
+         )}
+    end
+  end
+
+  def handle_event("remove-hand-entry", %{"index" => index}, socket) do
+    index = String.to_integer(index)
+
+    {:noreply,
+     assign(socket,
+       publish_hand_list: List.delete_at(socket.assigns.publish_hand_list, index)
+     )}
   end
 
   # --- Pub/sub event receivers ---
@@ -188,7 +243,9 @@ defmodule UnoWeb.DevtoolsLive do
       publish_selector_form: EventSelectorForm.new(),
       publish_form: nil,
       publish_card_list: [],
-      publish_card_builder_form: nil
+      publish_card_builder_form: nil,
+      publish_hand_list: [],
+      publish_hand_entry_builder_form: nil
     )
   end
 
@@ -210,6 +267,11 @@ defmodule UnoWeb.DevtoolsLive do
     do: CardBuilderForm.new()
 
   defp card_builder_for(_), do: nil
+
+  defp hand_entry_builder_for(type) when type in ~w(cards_played cards_drawn),
+    do: HandEntryBuilderForm.new()
+
+  defp hand_entry_builder_for(_), do: nil
 
   defp insert_event(socket, source, event) do
     stream_insert(

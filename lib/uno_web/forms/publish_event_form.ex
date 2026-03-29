@@ -98,45 +98,51 @@ defmodule UnoWeb.Forms.PublishEventForm do
 
   Card list items are maps like `%{"colour" => "red", "type" => "skip"}`.
   """
-  def build_event(event_type, data, card_list \\ [])
+  def build_event(event_type, data, card_list \\ [], hand_list \\ [])
 
-  def build_event("player_joined", data, _cards) do
+  def build_event("player_joined", data, _cards, _hand_list) do
     %Uno.Events.PlayerJoined{player_id: data.player_id, name: data.name}
   end
 
-  def build_event("player_left", data, _cards) do
+  def build_event("player_left", data, _cards, _hand_list) do
     %Uno.Events.PlayerLeft{player_id: data.player_id}
   end
 
-  def build_event("game_started", data, _cards) do
+  def build_event("game_started", data, _cards, _hand_list) do
     %Uno.Events.GameStarted{room_id: data.room_id}
   end
 
-  def build_event("game_ended", data, _cards) do
+  def build_event("game_ended", data, _cards, _hand_list) do
     %Uno.Events.GameEnded{winner_id: data.winner_id}
   end
 
-  def build_event("next_turn", data, _cards) do
+  def build_event("next_turn", data, _cards, _hand_list) do
     NextTurnForm.to_event(data)
   end
 
-  def build_event("cards_played", data, cards) do
+  def build_event("cards_played", data, cards, hand_list) do
     %Uno.Events.CardsPlayed{
       player_id: data.player_id,
       played_cards: Enum.map(cards, &to_played_card/1),
-      hand: %{}
+      hand: build_hand(hand_list)
     }
   end
 
-  def build_event("cards_drawn", data, cards) do
+  def build_event("cards_drawn", data, cards, hand_list) do
     %Uno.Events.CardsDrawn{
       player_id: data.player_id,
       drawn_cards: Enum.map(cards, &to_hand_card/1),
-      hand: %{}
+      hand: build_hand(hand_list)
     }
   end
 
   # --- Private helpers ---
+
+  defp build_hand(hand_list) do
+    Map.new(hand_list, fn entry ->
+      {to_hand_card(%{colour: entry.colour, type: entry.type}), entry.count}
+    end)
+  end
 
   defp generic_changeset(fields, params \\ %{}) do
     types = Map.new(fields)
