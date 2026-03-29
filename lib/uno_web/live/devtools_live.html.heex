@@ -5,7 +5,7 @@
     </h2>
   </header>
 
-  <main>
+  <main class="space-y-8">
     <section>
       <.header>Subscription</.header>
 
@@ -26,6 +26,146 @@
           class="checkbox"
           phx-click={JS.toggle_class("checkbox-success")}
         />
+      </.form>
+    </section>
+
+    <section>
+      <.header>Publish Event</.header>
+
+      <%!-- Event type selector form --%>
+      <.form for={@publish_selector_form} phx-change="publish-select-event" class="mb-4">
+        <.input
+          field={@publish_selector_form[:event_type]}
+          type="select"
+          label="Event Type"
+          prompt="Select an event..."
+          options={PublishEventForm.event_options(@subscription)}
+        />
+      </.form>
+
+      <%!-- Event fields form (only when an event type is selected) --%>
+      <.form
+        :if={@publish_form}
+        for={@publish_form}
+        phx-change="publish-change"
+        phx-submit="publish-submit"
+        class="space-y-2"
+      >
+        <%= case @publish_event_type do %>
+          <% "player_joined" -> %>
+            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+            <.input field={@publish_form[:name]} type="text" label="Name" />
+          <% "player_left" -> %>
+            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+          <% "game_started" -> %>
+            <.input field={@publish_form[:room_id]} type="text" label="Room ID" />
+          <% "game_ended" -> %>
+            <.input field={@publish_form[:winner_id]} type="text" label="Winner ID" />
+          <% "next_turn" -> %>
+            <div class="grid grid-cols-2 gap-4">
+              <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
+              <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+            </div>
+            <div class="border border-base-300 rounded-lg p-4 grid grid-cols-2 gap-4">
+              <.input
+                field={@publish_form[:top_card_type]}
+                type="select"
+                label="Top Card Type"
+                prompt="Select..."
+                options={PublishEventForm.card_type_options()}
+              />
+              <.input
+                field={@publish_form[:top_card_colour]}
+                type="select"
+                label="Top Card Colour"
+                prompt="Select..."
+                options={PublishEventForm.colour_options()}
+              />
+            </div>
+            <.input
+              field={@publish_form[:direction]}
+              type="select"
+              label="Direction"
+              prompt="Select..."
+              options={PublishEventForm.direction_options()}
+            />
+            <.input
+              field={@publish_form[:vulnerable_player_id]}
+              type="text"
+              label="Vulnerable Player ID (optional)"
+            />
+            <.input field={@publish_form[:skipped]} type="checkbox" label="Skipped" />
+            <div class="border border-base-300 rounded-lg p-4 space-y-2">
+              <.input field={@publish_form[:chain_enabled]} type="checkbox" label="Chain active" />
+              <div
+                :if={@publish_form[:chain_enabled].value == true}
+                class="grid grid-cols-2 gap-4"
+              >
+                <.input
+                  field={@publish_form[:chain_type]}
+                  type="select"
+                  label="Chain Type"
+                  prompt="Select..."
+                  options={PublishEventForm.chain_type_options()}
+                />
+                <.input field={@publish_form[:chain_amount]} type="number" label="Chain Amount" />
+              </div>
+            </div>
+          <% type when type in ~w(cards_played cards_drawn) -> %>
+            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+          <% _ -> %>
+        <% end %>
+
+        <%!-- Card builder (only for card events) --%>
+        <div
+          :if={@publish_card_builder_form}
+          class="border border-base-300 rounded-lg p-4 space-y-3"
+        >
+          <h4 class="font-semibold text-sm">Cards</h4>
+
+          <div class="flex gap-2">
+            <.input
+              field={@publish_card_builder_form[:type]}
+              type="select"
+              label="Type"
+              prompt="Select..."
+              options={PublishEventForm.card_type_options()}
+            />
+            <.input
+              field={@publish_card_builder_form[:colour]}
+              type="select"
+              label="Colour"
+              prompt="Select..."
+              options={PublishEventForm.colour_options()}
+            />
+            <div class="mt-3 self-center">
+              <.button type="button" phx-click="add-card">Add</.button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <span
+              :for={{card, i} <- Enum.with_index(@publish_card_list)}
+              class="badge badge-lg gap-1"
+            >
+              {card.colour} {card.type}
+              <button
+                type="button"
+                phx-click="remove-card"
+                phx-value-index={i}
+                class="btn btn-xs btn-ghost"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+
+          <p :if={@publish_card_list == []} class="text-sm text-base-content/50">
+            No cards added yet
+          </p>
+        </div>
+
+        <.button variant="primary" type="submit">Publish</.button>
       </.form>
     </section>
   </main>

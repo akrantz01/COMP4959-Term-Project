@@ -1,0 +1,339 @@
+defmodule UnoWeb.DevtoolsLiveTest do
+  use UnoWeb.ConnCase, async: true
+
+  import Phoenix.LiveViewTest
+
+  alias Uno.PubSub
+
+  describe "mount" do
+    test "renders subscription and publish sections", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/dev/tools")
+
+      assert html =~ "Subscription"
+      assert html =~ "Publish Event"
+      assert html =~ "Select an event..."
+    end
+  end
+
+  describe "event type selection" do
+    test "selecting an event type shows its fields", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      html = select_event(view, "player_joined")
+
+      assert html =~ "Player ID"
+      assert html =~ "Name"
+    end
+
+    test "selecting next_turn shows card and direction fields", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      html = select_event(view, "next_turn")
+
+      assert html =~ "Sequence"
+      assert html =~ "Top Card Colour"
+      assert html =~ "Top Card Type"
+      assert html =~ "Direction"
+    end
+
+    test "clearing event type hides fields", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      select_event(view, "player_joined")
+      html = select_event(view, "")
+
+      refute html =~ "Player ID"
+    end
+  end
+
+  describe "publishing simple events" do
+    test "publishes PlayerJoined to the room topic", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_room(view, "testroom")
+      PubSub.subscribe({:room, "testroom"})
+      select_event(view, "player_joined")
+
+      submit_publish(view, %{player_id: "p1", name: "Alice"})
+
+      assert_receive %Uno.Events.PlayerJoined{player_id: "p1", name: "Alice"}
+    end
+
+    test "publishes PlayerLeft to the room topic", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_room(view, "testroom")
+      PubSub.subscribe({:room, "testroom"})
+      select_event(view, "player_left")
+
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.PlayerLeft{player_id: "p1"}
+    end
+
+    test "publishes GameStarted to the room topic", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_room(view, "testroom")
+      PubSub.subscribe({:room, "testroom"})
+      select_event(view, "game_started")
+
+      submit_publish(view, %{room_id: "testroom"})
+
+      assert_receive %Uno.Events.GameStarted{room_id: "testroom"}
+    end
+
+    test "publishes GameEnded to the room topic", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_room(view, "testroom")
+      PubSub.subscribe({:room, "testroom"})
+      select_event(view, "game_ended")
+
+      submit_publish(view, %{winner_id: "p1"})
+
+      assert_receive %Uno.Events.GameEnded{winner_id: "p1"}
+    end
+  end
+
+  describe "publishing NextTurn" do
+    test "publishes NextTurn with a normal card", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "next_turn")
+
+      submit_publish(view, %{
+        sequence: "1",
+        player_id: "p1",
+        top_card_colour: "red",
+        top_card_type: "5",
+        direction: "ltr",
+        vulnerable_player_id: "",
+        skipped: "false",
+        chain_enabled: "false"
+      })
+
+      assert_receive %Uno.Events.NextTurn{
+        sequence: 1,
+        player_id: "p1",
+        top_card: {:red, 5},
+        direction: :ltr,
+        vulnerable_player_id: nil,
+        skipped: false,
+        chain: nil
+      }
+    end
+
+    test "publishes NextTurn with a wild card and chain", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "next_turn")
+
+      # First enable chain via phx-change (without chain fields — they aren't rendered yet)
+      view
+      |> form("form[phx-change=publish-change]", %{
+        publish: %{
+          sequence: "3",
+          player_id: "p2",
+          top_card_colour: "blue",
+          top_card_type: "wild_draw_4",
+          direction: "rtl",
+          vulnerable_player_id: "p1",
+          skipped: "false",
+          chain_enabled: "true"
+        }
+      })
+      |> render_change()
+
+      # Now submit with all fields including the now-visible chain fields
+      submit_publish(view, %{
+        sequence: "3",
+        player_id: "p2",
+        top_card_colour: "blue",
+        top_card_type: "wild_draw_4",
+        direction: "rtl",
+        vulnerable_player_id: "p1",
+        skipped: "false",
+        chain_enabled: "true",
+        chain_type: "wild_draw_4",
+        chain_amount: "8"
+      })
+
+      assert_receive %Uno.Events.NextTurn{
+        sequence: 3,
+        player_id: "p2",
+        top_card: {:wild_draw_4, :blue},
+        direction: :rtl,
+        vulnerable_player_id: "p1",
+        skipped: false,
+        chain: %{type: :wild_draw_4, amount: 8}
+      }
+    end
+  end
+
+  describe "card builder" do
+    test "adds and removes cards for CardsPlayed", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      select_event(view, "cards_played")
+
+      # Add a card via the card builder form
+      html = add_card(view, "red", "skip")
+
+      # Card should appear as a badge
+      assert html =~ "red skip"
+
+      # Add another card
+      html = add_card(view, "blue", "3")
+
+      assert html =~ "blue 3"
+
+      # Remove first card
+      html =
+        view
+        |> element(~s(button[phx-click="remove-card"][phx-value-index="0"]))
+        |> render_click()
+
+      refute html =~ "red skip"
+      assert html =~ "blue 3"
+    end
+
+    test "publishes CardsPlayed with card list", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_played")
+
+      add_card(view, "red", "skip")
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsPlayed{
+        player_id: "p1",
+        played_cards: [{:red, :skip}],
+        hand: %{}
+      }
+    end
+
+    test "publishes CardsDrawn with wild cards", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_drawn")
+
+      add_card(view, "red", "wild")
+      submit_publish(view, %{player_id: "p1"})
+
+      assert_receive %Uno.Events.CardsDrawn{
+        player_id: "p1",
+        drawn_cards: [:wild],
+        hand: %{}
+      }
+    end
+
+    test "rejects publishing cards_played with no cards", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "cards_played")
+
+      submit_publish(view, %{player_id: "p1"})
+
+      refute_receive %Uno.Events.CardsPlayed{}
+    end
+  end
+
+  describe "validation" do
+    test "does not publish when no subscription is active", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      PubSub.subscribe({:room, ""})
+      select_event(view, "player_joined")
+
+      submit_publish(view, %{player_id: "p1", name: "Alice"})
+
+      refute_receive %Uno.Events.PlayerJoined{}
+    end
+
+    test "does not publish when topic is not subscribed", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_room(view, "testroom")
+      PubSub.subscribe({:game, "testroom"})
+      select_event(view, "next_turn")
+
+      submit_publish(view, %{
+        sequence: "1",
+        player_id: "p1",
+        top_card_colour: "red",
+        top_card_type: "5",
+        direction: "ltr",
+        vulnerable_player_id: "",
+        skipped: "false",
+        chain_enabled: "false"
+      })
+
+      refute_receive %Uno.Events.NextTurn{}
+    end
+
+    test "shows form errors for missing required fields", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_room(view, "testroom")
+      select_event(view, "player_joined")
+
+      html = submit_publish(view, %{player_id: "", name: ""})
+
+      assert html =~ "can" and html =~ "be blank"
+    end
+  end
+
+  # --- Helpers ---
+
+  defp subscribe_to_room(view, id) do
+    view
+    |> form("form[phx-change=subscribe-change]", %{
+      subscription: %{id: id, room: "true", game: "false"}
+    })
+    |> render_change()
+  end
+
+  defp subscribe_to_game(view, id) do
+    view
+    |> form("form[phx-change=subscribe-change]", %{
+      subscription: %{id: id, room: "false", game: "true"}
+    })
+    |> render_change()
+  end
+
+  defp select_event(view, event_type) do
+    view
+    |> form("form[phx-change=publish-select-event]", %{event_selector: %{event_type: event_type}})
+    |> render_change()
+  end
+
+  defp submit_publish(view, params) do
+    view
+    |> form("form[phx-submit=publish-submit]", %{publish: params})
+    |> render_submit()
+  end
+
+  defp add_card(view, colour, type) do
+    # Update card builder fields via the publish form's phx-change
+    view
+    |> form("form[phx-submit=publish-submit]", %{card_builder: %{colour: colour, type: type}})
+    |> render_change()
+
+    # Click the Add button to add the card
+    view
+    |> element(~s(button[phx-click="add-card"]))
+    |> render_click()
+  end
+end

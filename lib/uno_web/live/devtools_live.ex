@@ -2,7 +2,9 @@ defmodule UnoWeb.DevtoolsLive do
   use UnoWeb, :live_view
 
   alias Uno.PubSub
-  alias UnoWeb.Forms.SubscriptionForm
+
+  alias UnoWeb.Forms.{PublishEventForm, SubscriptionForm}
+  alias UnoWeb.Forms.PublishEvent.{CardBuilderForm, EventSelectorForm}
 
   def mount(_params, _session, socket) do
     {:ok,
@@ -10,8 +12,17 @@ defmodule UnoWeb.DevtoolsLive do
      |> assign(
        subscription: %{id: nil, room: false, game: false},
        subscribe_form: SubscriptionForm.new()
+     )
+     |> assign(
+       publish_event_type: nil,
+       publish_selector_form: EventSelectorForm.new(),
+       publish_form: nil,
+       publish_card_list: [],
+       publish_card_builder_form: nil
      )}
   end
+
+  # --- Subscription events ---
 
   def handle_event("subscribe-change", %{"subscription" => params}, socket) do
     changeset = SubscriptionForm.changeset(params)
@@ -25,12 +36,115 @@ defmodule UnoWeb.DevtoolsLive do
          |> assign(
            subscription: data,
            subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate})
-         )}
+         )
+         |> reset_publish()}
 
       {:error, changeset} ->
         {:noreply, assign(socket, subscribe_form: SubscriptionForm.to_form(changeset))}
     end
   end
+
+  # --- Publish event selection ---
+
+  def handle_event("publish-select-event", %{"event_selector" => params}, socket) do
+    case EventSelectorForm.parse(params) do
+      {:ok, %{event_type: type}} when type in [nil, ""] ->
+        {:noreply, reset_publish(socket)}
+
+      {:ok, %{event_type: event_type}} ->
+        changeset = %{EventSelectorForm.changeset(params) | action: :validate}
+
+        {:noreply,
+         assign(socket,
+           publish_event_type: event_type,
+           publish_selector_form: EventSelectorForm.to_form(changeset),
+           publish_form: PublishEventForm.new(event_type),
+           publish_card_list: [],
+           publish_card_builder_form: card_builder_for(event_type)
+         )}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, publish_selector_form: EventSelectorForm.to_form(changeset))}
+    end
+  end
+
+  # --- Publish form validation ---
+
+  def handle_event("publish-change", params, socket) do
+    event_type = socket.assigns.publish_event_type
+
+    changeset = %{PublishEventForm.changeset(event_type, params["publish"]) | action: :validate}
+    form = PublishEventForm.to_form(changeset, event_type)
+
+    socket = assign(socket, publish_form: form)
+
+    socket =
+      if cb_params = params["card_builder"] do
+        cb_changeset = %{CardBuilderForm.changeset(cb_params) | action: :validate}
+        assign(socket, publish_card_builder_form: CardBuilderForm.to_form(cb_changeset))
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # --- Publish submit ---
+
+  def handle_event("publish-submit", %{"publish" => params}, socket) do
+    %{publish_event_type: event_type, publish_card_list: card_list, subscription: sub} =
+      socket.assigns
+
+    topic_kind = PublishEventForm.topic_kind(event_type)
+
+    with :ok <- validate_subscription(sub, topic_kind),
+         :ok <- validate_card_list(event_type, card_list),
+         {:ok, data} <- PublishEventForm.parse(event_type, params) do
+      event = PublishEventForm.build_event(event_type, data, card_list)
+      PubSub.broadcast({topic_kind, sub.id}, event)
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Event published")
+       |> assign(
+         publish_form: PublishEventForm.new(event_type),
+         publish_card_list: [],
+         publish_card_builder_form: card_builder_for(event_type)
+       )}
+    else
+      {:error, %Ecto.Changeset{} = changeset} ->
+        form = PublishEventForm.to_form(%{changeset | action: :validate}, event_type)
+        {:noreply, assign(socket, publish_form: form)}
+
+      {:error, message} ->
+        {:noreply, put_flash(socket, :error, message)}
+    end
+  end
+
+  # --- Card builder ---
+
+  def handle_event("add-card", _params, socket) do
+    case Ecto.Changeset.apply_action(socket.assigns.publish_card_builder_form.source, :insert) do
+      {:ok, card} ->
+        {:noreply,
+         assign(socket,
+           publish_card_list: socket.assigns.publish_card_list ++ [card],
+           publish_card_builder_form: CardBuilderForm.new()
+         )}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, publish_card_builder_form: CardBuilderForm.to_form(changeset))}
+    end
+  end
+
+  def handle_event("remove-card", %{"index" => index}, socket) do
+    index = String.to_integer(index)
+
+    {:noreply,
+     assign(socket, publish_card_list: List.delete_at(socket.assigns.publish_card_list, index))}
+  end
+
+  # --- Private helpers ---
 
   defp sync_subscriptions(old, new) do
     sync_channel(:room, old.id, old.room, new.id, new.room)
@@ -41,4 +155,33 @@ defmodule UnoWeb.DevtoolsLive do
     if old_id && old_on, do: PubSub.unsubscribe({kind, old_id})
     if new_id != "" && new_on, do: PubSub.subscribe({kind, new_id})
   end
+
+  defp reset_publish(socket) do
+    assign(socket,
+      publish_event_type: nil,
+      publish_selector_form: EventSelectorForm.new(),
+      publish_form: nil,
+      publish_card_list: [],
+      publish_card_builder_form: nil
+    )
+  end
+
+  defp validate_subscription(%{id: id}, _) when id in [nil, ""],
+    do: {:error, "Enter a subscription ID first"}
+
+  defp validate_subscription(sub, topic_kind) do
+    if Map.get(sub, topic_kind),
+      do: :ok,
+      else: {:error, "Subscribe to the #{topic_kind} topic first"}
+  end
+
+  defp validate_card_list(type, []) when type in ~w(cards_played cards_drawn),
+    do: {:error, "Add at least one card"}
+
+  defp validate_card_list(_, _), do: :ok
+
+  defp card_builder_for(type) when type in ~w(cards_played cards_drawn),
+    do: CardBuilderForm.new()
+
+  defp card_builder_for(_), do: nil
 end
