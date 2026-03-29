@@ -83,6 +83,24 @@ defmodule Uno.Events do
 
   ### Game -> Client events
 
+  defmodule Sync do
+    @moduledoc """
+    Synchronize the current game state with all the clients.
+    """
+
+    @enforce_keys [:sequence, :top_card, :direction, :hands]
+    defstruct [:sequence, :top_card, :direction, :hands, vulnerable_player_id: nil, chain: nil]
+
+    @type t :: %__MODULE__{
+            sequence: non_neg_integer(),
+            top_card: Uno.Events.played_card(),
+            direction: Uno.Events.direction(),
+            hands: %{String.t() => %{Uno.Events.played_card() => non_neg_integer()}},
+            vulnerable_player_id: String.t() | nil,
+            chain: Uno.Events.chain() | nil
+          }
+  end
+
   defmodule NextTurn do
     @moduledoc """
     The game has advanced to the next player's turn.
