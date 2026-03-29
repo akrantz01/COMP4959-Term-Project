@@ -13,7 +13,6 @@ defmodule UnoWeb.Forms.PublishEvent.CardBuilderForm do
   alias UnoWeb.Forms.PublishEventForm
 
   @types %{colour: :string, type: :string}
-  @wild_types ~w(wild wild_draw_4)
 
   def new(mode \\ :played), do: changeset(%{}, mode) |> to_form()
 
@@ -26,13 +25,7 @@ defmodule UnoWeb.Forms.PublishEvent.CardBuilderForm do
   end
 
   defp validate_colour(changeset, :drawn) do
-    if get_field(changeset, :type) in @wild_types do
-      force_change(changeset, :colour, "")
-    else
-      changeset
-      |> validate_required([:colour])
-      |> validate_inclusion(:colour, PublishEventForm.colours())
-    end
+    PublishEventForm.validate_colour_for_wild(changeset)
   end
 
   defp validate_colour(changeset, :played) do

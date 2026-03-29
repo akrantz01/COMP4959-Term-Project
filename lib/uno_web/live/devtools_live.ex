@@ -60,15 +60,12 @@ defmodule UnoWeb.DevtoolsLive do
         changeset = %{EventSelectorForm.changeset(params) | action: :validate}
 
         {:noreply,
-         assign(socket,
+         socket
+         |> assign(
            publish_event_type: event_type,
-           publish_selector_form: EventSelectorForm.to_form(changeset),
-           publish_form: PublishEventForm.new(event_type),
-           publish_card_list: [],
-           publish_card_builder_form: card_builder_for(event_type),
-           publish_hand_list: [],
-           publish_hand_entry_builder_form: hand_entry_builder_for(event_type)
-         )}
+           publish_selector_form: EventSelectorForm.to_form(changeset)
+         )
+         |> reset_publish_builders()}
 
       {:error, changeset} ->
         {:noreply, assign(socket, publish_selector_form: EventSelectorForm.to_form(changeset))}
@@ -79,33 +76,13 @@ defmodule UnoWeb.DevtoolsLive do
 
   def handle_event("publish-change", params, socket) do
     event_type = socket.assigns.publish_event_type
-
     changeset = %{PublishEventForm.changeset(event_type, params["publish"]) | action: :validate}
-    form = PublishEventForm.to_form(changeset, event_type)
 
-    socket = assign(socket, publish_form: form)
-
-    socket =
-      if cb_params = params["card_builder"] do
-        mode = card_builder_mode(event_type)
-        cb_changeset = %{CardBuilderForm.changeset(cb_params, mode) | action: :validate}
-        assign(socket, publish_card_builder_form: CardBuilderForm.to_form(cb_changeset))
-      else
-        socket
-      end
-
-    socket =
-      if heb_params = params["hand_entry_builder"] do
-        heb_changeset = %{HandEntryBuilderForm.changeset(heb_params) | action: :validate}
-
-        assign(socket,
-          publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(heb_changeset)
-        )
-      else
-        socket
-      end
-
-    {:noreply, socket}
+    {:noreply,
+     socket
+     |> assign(publish_form: PublishEventForm.to_form(changeset, event_type))
+     |> maybe_validate_card_builder(params["card_builder"], event_type)
+     |> maybe_validate_hand_entry_builder(params["hand_entry_builder"])}
   end
 
   # --- Publish submit ---
@@ -132,13 +109,7 @@ defmodule UnoWeb.DevtoolsLive do
       {:noreply,
        socket
        |> put_flash(:info, "Event published")
-       |> assign(
-         publish_form: PublishEventForm.new(event_type),
-         publish_card_list: [],
-         publish_card_builder_form: card_builder_for(event_type),
-         publish_hand_list: [],
-         publish_hand_entry_builder_form: hand_entry_builder_for(event_type)
-       )}
+       |> reset_publish_builders()}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
         form = PublishEventForm.to_form(%{changeset | action: :validate}, event_type)
@@ -154,79 +125,61 @@ defmodule UnoWeb.DevtoolsLive do
   def handle_event("add-card", _params, socket) do
     mode = card_builder_mode(socket.assigns.publish_event_type)
 
-    case Ecto.Changeset.apply_action(socket.assigns.publish_card_builder_form.source, :insert) do
-      {:ok, card} ->
-        {:noreply,
-         assign(socket,
-           publish_card_list: socket.assigns.publish_card_list ++ [card],
-           publish_card_builder_form: CardBuilderForm.new(mode)
-         )}
-
-      {:error, changeset} ->
-        {:noreply, assign(socket, publish_card_builder_form: CardBuilderForm.to_form(changeset))}
-    end
+    {:noreply,
+     add_builder_item(
+       socket,
+       :publish_card_builder_form,
+       :publish_card_list,
+       CardBuilderForm.new(mode)
+     )}
   end
 
-  def handle_event("remove-card", %{"index" => index}, socket) do
-    index = String.to_integer(index)
-
-    {:noreply,
-     assign(socket, publish_card_list: List.delete_at(socket.assigns.publish_card_list, index))}
+  def handle_event("remove-card", %{"index" => idx}, socket) do
+    {:noreply, remove_builder_item(socket, :publish_card_list, idx)}
   end
 
   # --- Hand entry builder ---
 
   def handle_event("add-hand-entry", _params, socket) do
-    case Ecto.Changeset.apply_action(
-           socket.assigns.publish_hand_entry_builder_form.source,
-           :insert
-         ) do
-      {:ok, entry} ->
-        {:noreply,
-         assign(socket,
-           publish_hand_list: socket.assigns.publish_hand_list ++ [entry],
-           publish_hand_entry_builder_form: HandEntryBuilderForm.new()
-         )}
-
-      {:error, changeset} ->
-        {:noreply,
-         assign(socket,
-           publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(changeset)
-         )}
-    end
+    {:noreply,
+     add_builder_item(
+       socket,
+       :publish_hand_entry_builder_form,
+       :publish_hand_list,
+       HandEntryBuilderForm.new()
+     )}
   end
 
-  def handle_event("remove-hand-entry", %{"index" => index}, socket) do
-    index = String.to_integer(index)
-
-    {:noreply,
-     assign(socket,
-       publish_hand_list: List.delete_at(socket.assigns.publish_hand_list, index)
-     )}
+  def handle_event("remove-hand-entry", %{"index" => idx}, socket) do
+    {:noreply, remove_builder_item(socket, :publish_hand_list, idx)}
   end
 
   # --- Pub/sub event receivers ---
 
-  def handle_info(%Events.PlayerJoined{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Room", msg)}
+  @event_sources %{
+    Events.PlayerJoined => "Room",
+    Events.PlayerLeft => "Room",
+    Events.GameStarted => "Room",
+    Events.GameEnded => "Room",
+    Events.NextTurn => "Game",
+    Events.CardsPlayed => "Game",
+    Events.CardsDrawn => "Game"
+  }
 
-  def handle_info(%Events.PlayerLeft{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Room", msg)}
-
-  def handle_info(%Events.GameStarted{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Room", msg)}
-
-  def handle_info(%Events.GameEnded{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Room", msg)}
-
-  def handle_info(%Events.NextTurn{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Game", msg)}
-
-  def handle_info(%Events.CardsPlayed{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Game", msg)}
-
-  def handle_info(%Events.CardsDrawn{} = msg, socket),
-    do: {:noreply, insert_event(socket, "Game", msg)}
+  def handle_info(%mod{} = msg, socket) when is_map_key(@event_sources, mod) do
+    {:noreply,
+     stream_insert(
+       socket,
+       :events,
+       %{
+         id: Nanoid.generate(),
+         source: @event_sources[mod],
+         content: inspect(msg, pretty: true, width: 0),
+         timestamp: DateTime.utc_now()
+       },
+       at: 0
+     )}
+  end
 
   # --- Private helpers ---
 
@@ -241,15 +194,54 @@ defmodule UnoWeb.DevtoolsLive do
   end
 
   defp reset_publish(socket) do
-    assign(socket,
+    socket
+    |> assign(
       publish_event_type: nil,
-      publish_selector_form: EventSelectorForm.new(),
-      publish_form: nil,
-      publish_card_list: [],
-      publish_card_builder_form: nil,
-      publish_hand_list: [],
-      publish_hand_entry_builder_form: nil
+      publish_selector_form: EventSelectorForm.new()
     )
+    |> reset_publish_builders()
+  end
+
+  defp reset_publish_builders(socket) do
+    event_type = socket.assigns.publish_event_type
+
+    assign(socket,
+      publish_form: if(event_type, do: PublishEventForm.new(event_type)),
+      publish_card_list: [],
+      publish_card_builder_form: card_builder_for(event_type),
+      publish_hand_list: [],
+      publish_hand_entry_builder_form: hand_entry_builder_for(event_type)
+    )
+  end
+
+  defp maybe_validate_card_builder(socket, nil, _event_type), do: socket
+
+  defp maybe_validate_card_builder(socket, params, event_type) do
+    mode = card_builder_mode(event_type)
+    changeset = %{CardBuilderForm.changeset(params, mode) | action: :validate}
+    assign(socket, publish_card_builder_form: CardBuilderForm.to_form(changeset))
+  end
+
+  defp maybe_validate_hand_entry_builder(socket, nil), do: socket
+
+  defp maybe_validate_hand_entry_builder(socket, params) do
+    changeset = %{HandEntryBuilderForm.changeset(params) | action: :validate}
+    assign(socket, publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(changeset))
+  end
+
+  defp add_builder_item(socket, form_key, list_key, fresh_form) do
+    case Ecto.Changeset.apply_action(socket.assigns[form_key].source, :insert) do
+      {:ok, item} ->
+        assign(socket, [{list_key, socket.assigns[list_key] ++ [item]}, {form_key, fresh_form}])
+
+      {:error, changeset} ->
+        assign(socket, [{form_key, Phoenix.Component.to_form(changeset)}])
+    end
+  end
+
+  defp remove_builder_item(socket, list_key, index) do
+    index = String.to_integer(index)
+    assign(socket, [{list_key, List.delete_at(socket.assigns[list_key], index)}])
   end
 
   defp validate_subscription(%{id: id}, _) when id in [nil, ""],
@@ -266,30 +258,16 @@ defmodule UnoWeb.DevtoolsLive do
 
   defp validate_card_list(_, _), do: :ok
 
-  defp card_builder_for(type) when type in ~w(cards_played cards_drawn),
-    do: CardBuilderForm.new(card_builder_mode(type))
+  defp card_event?(type), do: type in ~w(cards_played cards_drawn)
 
-  defp card_builder_for(_), do: nil
+  defp card_builder_for(type) do
+    if card_event?(type), do: CardBuilderForm.new(card_builder_mode(type))
+  end
 
   defp card_builder_mode("cards_drawn"), do: :drawn
   defp card_builder_mode(_), do: :played
 
-  defp hand_entry_builder_for(type) when type in ~w(cards_played cards_drawn),
-    do: HandEntryBuilderForm.new()
-
-  defp hand_entry_builder_for(_), do: nil
-
-  defp insert_event(socket, source, event) do
-    stream_insert(
-      socket,
-      :events,
-      %{
-        id: Nanoid.generate(),
-        source: source,
-        content: inspect(event, pretty: true, width: 0),
-        timestamp: DateTime.utc_now()
-      },
-      at: 0
-    )
+  defp hand_entry_builder_for(type) do
+    if card_event?(type), do: HandEntryBuilderForm.new()
   end
 end

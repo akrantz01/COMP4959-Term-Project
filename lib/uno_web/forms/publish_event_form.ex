@@ -163,6 +163,17 @@ defmodule UnoWeb.Forms.PublishEventForm do
   defp direction_label("ltr"), do: "Left to Right"
   defp direction_label("rtl"), do: "Right to Left"
 
+  @doc "Validates colour: required for non-wild cards, forced blank for wild cards."
+  def validate_colour_for_wild(changeset) do
+    if Ecto.Changeset.get_field(changeset, :type) in ~w(wild wild_draw_4) do
+      Ecto.Changeset.force_change(changeset, :colour, "")
+    else
+      changeset
+      |> Ecto.Changeset.validate_required([:colour])
+      |> Ecto.Changeset.validate_inclusion(:colour, @colours)
+    end
+  end
+
   @doc false
   def to_played_card(%{type: type, colour: colour})
       when type in ~w(wild wild_draw_4) do
