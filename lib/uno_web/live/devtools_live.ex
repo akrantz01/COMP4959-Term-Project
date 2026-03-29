@@ -39,7 +39,8 @@ defmodule UnoWeb.DevtoolsLive do
            subscription: data,
            subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate})
          )
-         |> reset_publish()}
+         |> reset_publish()
+         |> stream(:events, [], reset: true)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, subscribe_form: SubscriptionForm.to_form(changeset))}
