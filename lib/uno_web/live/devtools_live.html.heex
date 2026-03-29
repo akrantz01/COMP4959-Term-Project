@@ -175,6 +175,9 @@
       <.table id="events" rows={@streams.events} row_id={fn {dom_id, _} -> dom_id end}>
         <:col :let={{_, event}} label="Source">{event.source}</:col>
         <:col :let={{_, event}} label="Content"><pre>{event.content}</pre></:col>
+        <:col :let={{dom_id, event}} label="Timestamp">
+          <.timestamp id={"#{dom_id}-timestamp"} at={event.timestamp} />
+        </:col>
       </.table>
     </section>
   </main>

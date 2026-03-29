@@ -448,6 +448,43 @@ defmodule UnoWeb.CoreComponents do
     """
   end
 
+  @doc """
+  Renders an ISO 8601 formatted timestamp.
+
+  The timestamp is rendered in the user's timezone using JavaScript.
+  """
+  attr :id, :string, required: true
+  attr :at, DateTime, required: true
+  attr :date_style, :string, default: "medium", values: ~w(full long medium short)
+  attr :time_style, :string, default: "medium", values: ~w(full long medium short)
+
+  def timestamp(assigns) do
+    ~H"""
+    <time
+      id={@id}
+      phx-hook=".Timestamp"
+      datetime={DateTime.to_iso8601(@at)}
+      data-date-style={@date_style}
+      data-time-style={@time_style}
+    >
+      {DateTime.to_string(@at)}
+    </time>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Timestamp">
+      export default {
+        mounted() { this.formatTime() },
+        updated() { this.formatTime() },
+        formatTime() {
+          const dt = new Date(this.el.dateTime);
+          this.el.textContent = dt.toLocaleString(undefined, {
+            dateStyle: this.el.dataset.dateStyle,
+            timeStyle: this.el.dataset.timeStyle,
+          });
+        },
+      }
+    </script>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do

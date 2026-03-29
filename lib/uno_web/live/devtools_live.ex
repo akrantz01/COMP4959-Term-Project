@@ -218,7 +218,8 @@ defmodule UnoWeb.DevtoolsLive do
       %{
         id: Nanoid.generate(),
         source: source,
-        content: inspect(event, pretty: true, width: 0)
+        content: inspect(event, pretty: true, width: 0),
+        timestamp: DateTime.utc_now()
       },
       at: 0
     )
