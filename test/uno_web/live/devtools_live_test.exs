@@ -254,6 +254,73 @@ defmodule UnoWeb.DevtoolsLiveTest do
       }
     end
 
+    test "clicking add card with nothing selected does not crash and adds no card",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      select_event(view, "cards_played")
+
+      html =
+        view
+        |> element(~s(button[phx-click="add-card"]))
+        |> render_click()
+
+      assert html =~ "No cards added yet"
+    end
+
+    test "clicking add hand entry with nothing selected does not crash and adds no entry",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      select_event(view, "cards_played")
+
+      html =
+        view
+        |> element(~s(button[phx-click="add-hand-entry"]))
+        |> render_click()
+
+      assert html =~ "No hand cards added"
+    end
+
+    test "shows card builder validation errors after interacting with fields",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      select_event(view, "cards_played")
+
+      # Touch the fields first so used_input? returns true
+      view
+      |> form("form[phx-submit=publish-submit]", %{card_builder: %{colour: "", type: ""}})
+      |> render_change()
+
+      html =
+        view
+        |> element(~s(button[phx-click="add-card"]))
+        |> render_click()
+
+      assert html =~ "can" and html =~ "be blank"
+    end
+
+    test "shows hand entry builder validation errors after interacting with fields",
+         %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      select_event(view, "cards_played")
+
+      view
+      |> form("form[phx-submit=publish-submit]", %{
+        hand_entry_builder: %{colour: "", type: "", count: ""}
+      })
+      |> render_change()
+
+      html =
+        view
+        |> element(~s(button[phx-click="add-hand-entry"]))
+        |> render_click()
+
+      assert html =~ "can" and html =~ "be blank"
+    end
+
     test "rejects publishing cards_played with no cards", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/dev/tools")
 

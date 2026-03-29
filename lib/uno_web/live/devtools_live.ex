@@ -130,7 +130,8 @@ defmodule UnoWeb.DevtoolsLive do
        socket,
        :publish_card_builder_form,
        :publish_card_list,
-       CardBuilderForm.new(mode)
+       CardBuilderForm.new(mode),
+       &CardBuilderForm.to_form/1
      )}
   end
 
@@ -146,7 +147,8 @@ defmodule UnoWeb.DevtoolsLive do
        socket,
        :publish_hand_entry_builder_form,
        :publish_hand_list,
-       HandEntryBuilderForm.new()
+       HandEntryBuilderForm.new(),
+       &HandEntryBuilderForm.to_form/1
      )}
   end
 
@@ -229,13 +231,13 @@ defmodule UnoWeb.DevtoolsLive do
     assign(socket, publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(changeset))
   end
 
-  defp add_builder_item(socket, form_key, list_key, fresh_form) do
+  defp add_builder_item(socket, form_key, list_key, fresh_form, to_form_fn) do
     case Ecto.Changeset.apply_action(socket.assigns[form_key].source, :insert) do
       {:ok, item} ->
         assign(socket, [{list_key, socket.assigns[list_key] ++ [item]}, {form_key, fresh_form}])
 
       {:error, changeset} ->
-        assign(socket, [{form_key, Phoenix.Component.to_form(changeset)}])
+        assign(socket, [{form_key, to_form_fn.(changeset)}])
     end
   end
 
