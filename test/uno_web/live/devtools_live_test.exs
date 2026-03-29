@@ -450,6 +450,132 @@ defmodule UnoWeb.DevtoolsLiveTest do
     end
   end
 
+  describe "publishing Sync" do
+    test "selecting sync shows expected fields", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      html = select_event(view, "sync")
+
+      assert html =~ "Sequence"
+      assert html =~ "Top Card Colour"
+      assert html =~ "Direction"
+      assert html =~ "Hand"
+      refute html =~ "Skipped"
+    end
+
+    test "sync hand builder shows player ID field", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      html = select_event(view, "sync")
+
+      assert html =~ ~s(name="hand_entry_builder[player_id]")
+    end
+
+    test "publishes Sync with basic fields and empty hands", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "sync")
+
+      submit_publish(view, %{
+        sequence: "1",
+        top_card_colour: "red",
+        top_card_type: "5",
+        direction: "ltr",
+        vulnerable_player_id: "",
+        chain_enabled: "false"
+      })
+
+      assert_receive %Uno.Events.Sync{
+        sequence: 1,
+        top_card: {:red, 5},
+        direction: :ltr,
+        hands: %{},
+        vulnerable_player_id: nil,
+        chain: nil
+      }
+    end
+
+    test "publishes Sync with chain", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "sync")
+
+      # Enable chain via phx-change first
+      view
+      |> form("form[phx-change=publish-change]", %{
+        publish: %{
+          sequence: "2",
+          top_card_colour: "blue",
+          top_card_type: "draw_2",
+          direction: "rtl",
+          vulnerable_player_id: "",
+          chain_enabled: "true"
+        }
+      })
+      |> render_change()
+
+      submit_publish(view, %{
+        sequence: "2",
+        top_card_colour: "blue",
+        top_card_type: "draw_2",
+        direction: "rtl",
+        vulnerable_player_id: "",
+        chain_enabled: "true",
+        chain_type: "draw_2",
+        chain_amount: "4"
+      })
+
+      assert_receive %Uno.Events.Sync{
+        sequence: 2,
+        top_card: {:blue, :draw_2},
+        direction: :rtl,
+        chain: %{type: :draw_2, amount: 4}
+      }
+    end
+
+    test "publishes Sync with multiple player hands", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      subscribe_to_game(view, "testgame")
+      PubSub.subscribe({:game, "testgame"})
+      select_event(view, "sync")
+
+      add_sync_hand_entry(view, "p1", "red", "5", 2)
+      add_sync_hand_entry(view, "p2", "", "wild", 1)
+
+      submit_publish(view, %{
+        sequence: "1",
+        top_card_colour: "red",
+        top_card_type: "5",
+        direction: "ltr",
+        vulnerable_player_id: "",
+        chain_enabled: "false"
+      })
+
+      assert_receive %Uno.Events.Sync{
+        hands: %{"p1" => %{{:red, 5} => 2}, "p2" => %{wild: 1}}
+      }
+    end
+
+    test "groups hand entries by player in the display", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/dev/tools")
+
+      select_event(view, "sync")
+
+      add_sync_hand_entry(view, "alice", "red", "5", 2)
+      html = add_sync_hand_entry(view, "bob", "blue", "3", 1)
+
+      assert html =~ "alice"
+      assert html =~ "bob"
+      assert html =~ "red 5"
+      assert html =~ "blue 3"
+    end
+  end
+
   describe "validation" do
     test "does not publish when no subscription is active", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/dev/tools")
@@ -529,6 +655,18 @@ defmodule UnoWeb.DevtoolsLiveTest do
     view
     |> form("form[phx-submit=publish-submit]", %{
       hand_entry_builder: %{colour: colour, type: type, count: count}
+    })
+    |> render_change()
+
+    view
+    |> element(~s(button[phx-click="add-hand-entry"]))
+    |> render_click()
+  end
+
+  defp add_sync_hand_entry(view, player_id, colour, type, count) do
+    view
+    |> form("form[phx-submit=publish-submit]", %{
+      hand_entry_builder: %{player_id: player_id, colour: colour, type: type, count: count}
     })
     |> render_change()
 

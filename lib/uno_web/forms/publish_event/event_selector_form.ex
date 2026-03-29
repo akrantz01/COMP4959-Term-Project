@@ -5,7 +5,7 @@ defmodule UnoWeb.Forms.PublishEvent.EventSelectorForm do
 
   import Ecto.Changeset
 
-  @event_types ~w(player_joined player_left game_started game_ended next_turn cards_played cards_drawn)
+  @event_types ~w(player_joined player_left game_started game_ended next_turn cards_played cards_drawn sync)
 
   @types %{event_type: :string}
 

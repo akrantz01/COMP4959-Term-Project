@@ -9,7 +9,7 @@ defmodule UnoWeb.Forms.PublishEventForm do
 
   import Ecto.Changeset
 
-  alias UnoWeb.Forms.PublishEvent.NextTurnForm
+  alias UnoWeb.Forms.PublishEvent.{NextTurnForm, SyncForm}
 
   @colours ~w(red green blue yellow)
   @card_types ~w(0 1 2 3 4 5 6 7 8 9 reverse skip draw_2 wild wild_draw_4)
@@ -27,6 +27,7 @@ defmodule UnoWeb.Forms.PublishEventForm do
     "game_started" => {:room, [room_id: :string]},
     "game_ended" => {:room, [winner_id: :string]},
     "next_turn" => {:game, :custom},
+    "sync" => {:game, :custom},
     "cards_played" => {:game, [player_id: :string]},
     "cards_drawn" => {:game, [player_id: :string]}
   }
@@ -40,6 +41,7 @@ defmodule UnoWeb.Forms.PublishEventForm do
 
   @game_event_options [
     [key: "Next Turn", value: "next_turn"],
+    [key: "Sync", value: "sync"],
     [key: "Cards Played", value: "cards_played"],
     [key: "Cards Drawn", value: "cards_drawn"]
   ]
@@ -67,28 +69,28 @@ defmodule UnoWeb.Forms.PublishEventForm do
 
   def new(event_type) do
     case Map.fetch!(@event_types, event_type) do
-      {_, :custom} -> NextTurnForm.new()
+      {_, :custom} -> custom_form_module(event_type).new()
       {_, fields} -> fields |> generic_changeset() |> to_form(event_type)
     end
   end
 
   def changeset(event_type, params) do
     case Map.fetch!(@event_types, event_type) do
-      {_, :custom} -> NextTurnForm.changeset(params)
+      {_, :custom} -> custom_form_module(event_type).changeset(params)
       {_, fields} -> generic_changeset(fields, params)
     end
   end
 
   def to_form(changeset, event_type) do
     case Map.fetch!(@event_types, event_type) do
-      {_, :custom} -> NextTurnForm.to_form(changeset)
+      {_, :custom} -> custom_form_module(event_type).to_form(changeset)
       {_, _fields} -> Phoenix.Component.to_form(changeset, as: "publish")
     end
   end
 
   def parse(event_type, params) do
     case Map.fetch!(@event_types, event_type) do
-      {_, :custom} -> NextTurnForm.parse(params)
+      {_, :custom} -> custom_form_module(event_type).parse(params)
       {_, fields} -> fields |> generic_changeset(params) |> apply_action(:insert)
     end
   end
@@ -120,6 +122,10 @@ defmodule UnoWeb.Forms.PublishEventForm do
     NextTurnForm.to_event(data)
   end
 
+  def build_event("sync", data, _cards, hand_list) do
+    SyncForm.to_event(data, hand_list)
+  end
+
   def build_event("cards_played", data, cards, hand_list) do
     %Uno.Events.CardsPlayed{
       player_id: data.player_id,
@@ -138,11 +144,15 @@ defmodule UnoWeb.Forms.PublishEventForm do
 
   # --- Private helpers ---
 
-  defp build_hand(hand_list) do
+  @doc false
+  def build_hand(hand_list) do
     Map.new(hand_list, fn entry ->
       {to_hand_card(%{colour: entry.colour, type: entry.type}), entry.count}
     end)
   end
+
+  defp custom_form_module("next_turn"), do: NextTurnForm
+  defp custom_form_module("sync"), do: SyncForm
 
   defp generic_changeset(fields, params \\ %{}) do
     types = Map.new(fields)
@@ -173,6 +183,25 @@ defmodule UnoWeb.Forms.PublishEventForm do
       |> Ecto.Changeset.validate_inclusion(:colour, @colours)
     end
   end
+
+  @doc "Validates chain fields: requires chain_type and chain_amount when chain_enabled is true."
+  def validate_chain(changeset) do
+    if get_field(changeset, :chain_enabled) do
+      changeset
+      |> validate_required([:chain_type, :chain_amount])
+      |> validate_inclusion(:chain_type, @chain_types)
+      |> validate_number(:chain_amount, greater_than: 0)
+    else
+      changeset
+    end
+  end
+
+  @doc "Builds a chain map from parsed form data, or nil if chain is disabled."
+  def build_chain(%{chain_enabled: true, chain_type: type, chain_amount: amount}) do
+    %{type: String.to_existing_atom(type), amount: amount}
+  end
+
+  def build_chain(_), do: nil
 
   @doc false
   def to_played_card(%{type: type, colour: colour})

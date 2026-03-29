@@ -111,6 +111,52 @@
                 <.input field={@publish_form[:chain_amount]} type="number" label="Chain Amount" />
               </div>
             </div>
+          <% "sync" -> %>
+            <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
+            <div class="border border-base-300 rounded-lg p-4 grid grid-cols-2 gap-4">
+              <.input
+                field={@publish_form[:top_card_type]}
+                type="select"
+                label="Top Card Type"
+                prompt="Select..."
+                options={PublishEventForm.card_type_options()}
+              />
+              <.input
+                field={@publish_form[:top_card_colour]}
+                type="select"
+                label="Top Card Colour"
+                prompt="Select..."
+                options={PublishEventForm.colour_options()}
+              />
+            </div>
+            <.input
+              field={@publish_form[:direction]}
+              type="select"
+              label="Direction"
+              prompt="Select..."
+              options={PublishEventForm.direction_options()}
+            />
+            <.input
+              field={@publish_form[:vulnerable_player_id]}
+              type="text"
+              label="Vulnerable Player ID (optional)"
+            />
+            <div class="border border-base-300 rounded-lg p-4 space-y-2">
+              <.input field={@publish_form[:chain_enabled]} type="checkbox" label="Chain active" />
+              <div
+                :if={@publish_form[:chain_enabled].value == true}
+                class="grid grid-cols-2 gap-4"
+              >
+                <.input
+                  field={@publish_form[:chain_type]}
+                  type="select"
+                  label="Chain Type"
+                  prompt="Select..."
+                  options={PublishEventForm.chain_type_options()}
+                />
+                <.input field={@publish_form[:chain_amount]} type="number" label="Chain Amount" />
+              </div>
+            </div>
           <% type when type in ~w(cards_played cards_drawn) -> %>
             <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
           <% _ -> %>
@@ -178,6 +224,12 @@
 
           <div class="flex gap-2">
             <.input
+              :if={@publish_event_type == "sync"}
+              field={@publish_hand_entry_builder_form[:player_id]}
+              type="text"
+              label="Player ID"
+            />
+            <.input
               field={@publish_hand_entry_builder_form[:type]}
               type="select"
               label="Type"
@@ -202,7 +254,8 @@
             </div>
           </div>
 
-          <div class="flex flex-wrap gap-2">
+          <%!-- Flat display for cards_played/cards_drawn --%>
+          <div :if={@publish_event_type != "sync"} class="flex flex-wrap gap-2">
             <span
               :for={{entry, i} <- Enum.with_index(@publish_hand_list)}
               class="badge badge-lg gap-1"
@@ -217,6 +270,32 @@
                 ×
               </button>
             </span>
+          </div>
+
+          <%!-- Grouped display for sync — cards grouped under player headings --%>
+          <div :if={@publish_event_type == "sync"} class="space-y-2">
+            <div :for={
+              {pid, entries} <-
+                Enum.group_by(
+                  Enum.with_index(@publish_hand_list),
+                  fn {e, _i} -> e.player_id end
+                )
+            }>
+              <p class="text-sm font-semibold">{pid}</p>
+              <div class="flex flex-wrap gap-2">
+                <span :for={{entry, i} <- entries} class="badge badge-lg gap-1">
+                  {entry.colour} {entry.type} ×{entry.count}
+                  <button
+                    type="button"
+                    phx-click="remove-hand-entry"
+                    phx-value-index={i}
+                    class="btn btn-xs btn-ghost"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            </div>
           </div>
 
           <p :if={@publish_hand_list == []} class="text-sm text-base-content/50">

@@ -82,7 +82,7 @@ defmodule UnoWeb.DevtoolsLive do
      socket
      |> assign(publish_form: PublishEventForm.to_form(changeset, event_type))
      |> maybe_validate_card_builder(params["card_builder"], event_type)
-     |> maybe_validate_hand_entry_builder(params["hand_entry_builder"])}
+     |> maybe_validate_hand_entry_builder(params["hand_entry_builder"], event_type)}
   end
 
   # --- Publish submit ---
@@ -142,12 +142,14 @@ defmodule UnoWeb.DevtoolsLive do
   # --- Hand entry builder ---
 
   def handle_event("add-hand-entry", _params, socket) do
+    mode = hand_entry_mode(socket.assigns.publish_event_type)
+
     {:noreply,
      add_builder_item(
        socket,
        :publish_hand_entry_builder_form,
        :publish_hand_list,
-       HandEntryBuilderForm.new(),
+       HandEntryBuilderForm.new(mode),
        &HandEntryBuilderForm.to_form/1
      )}
   end
@@ -163,6 +165,7 @@ defmodule UnoWeb.DevtoolsLive do
     Events.PlayerLeft => "Room",
     Events.GameStarted => "Room",
     Events.GameEnded => "Room",
+    Events.Sync => "Sync",
     Events.NextTurn => "Game",
     Events.CardsPlayed => "Game",
     Events.CardsDrawn => "Game"
@@ -224,10 +227,11 @@ defmodule UnoWeb.DevtoolsLive do
     assign(socket, publish_card_builder_form: CardBuilderForm.to_form(changeset))
   end
 
-  defp maybe_validate_hand_entry_builder(socket, nil), do: socket
+  defp maybe_validate_hand_entry_builder(socket, nil, _event_type), do: socket
 
-  defp maybe_validate_hand_entry_builder(socket, params) do
-    changeset = %{HandEntryBuilderForm.changeset(params) | action: :validate}
+  defp maybe_validate_hand_entry_builder(socket, params, event_type) do
+    mode = hand_entry_mode(event_type)
+    changeset = %{HandEntryBuilderForm.changeset(params, mode) | action: :validate}
     assign(socket, publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(changeset))
   end
 
@@ -261,6 +265,7 @@ defmodule UnoWeb.DevtoolsLive do
   defp validate_card_list(_, _), do: :ok
 
   defp card_event?(type), do: type in ~w(cards_played cards_drawn)
+  defp hand_event?(type), do: type in ~w(cards_played cards_drawn sync)
 
   defp card_builder_for(type) do
     if card_event?(type), do: CardBuilderForm.new(card_builder_mode(type))
@@ -270,6 +275,9 @@ defmodule UnoWeb.DevtoolsLive do
   defp card_builder_mode(_), do: :played
 
   defp hand_entry_builder_for(type) do
-    if card_event?(type), do: HandEntryBuilderForm.new()
+    if hand_event?(type), do: HandEntryBuilderForm.new(hand_entry_mode(type))
   end
+
+  defp hand_entry_mode("sync"), do: :sync
+  defp hand_entry_mode(_), do: :default
 end
