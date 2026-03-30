@@ -64,16 +64,13 @@ defmodule Uno.Game.Server do
   # -------------------- Event Handlers --------------------
 
   # Handles the inactivity timer expiring for a player's turn
-  defp inactivity_timeout(state, player_id, sequence_number) do
-  end
+  defp inactivity_timeout(state, _player_id, _sequence_number), do: state
 
   # Handles auto-play for a disconnected player
-  defp handle_auto_play(state, player_id) do
-  end
+  defp handle_auto_play(state, _player_id), do: state
 
   # UNO call grace period expiring
-  defp expire_uno_call_buffer(state, player_id, sequence_number) do
-  end
+  defp expire_uno_call_buffer(state, _player_id, _sequence_number), do: state
 
   # -------------------- Server Callbacks --------------------
 
@@ -81,7 +78,7 @@ defmodule Uno.Game.Server do
   def init({room_id, player_ids}) do
     PubSub.subscribe(Uno.PubSub, "game:#{room_id}")
 
-    game_state = Logic.new(player_ids)
+    initial_logic_state = Logic.new(player_ids)
 
     server_state = %{
       room_id: room_id,
@@ -90,48 +87,51 @@ defmodule Uno.Game.Server do
       timers: %{}
     }
 
-     {:ok, server_state}
+    {:ok, server_state}
   end
 
   @impl true
-  def handle_cast({:connect, player_id}, state) do
+  def handle_cast({:connect, _player_id}, state) do
     {:noreply, state}
   end
 
   @impl true
-  def handle_cast({:disconnect, player_id}, state) do
+  def handle_cast({:disconnect, _player_id}, state) do
     {:noreply, state}
   end
 
   @impl true
-  def handle_call({:play, player_id, cards}, _from, state) do
+  def handle_call({:play, _player_id, _cards}, _from, state) do
     {:reply, :ok, state}
   end
 
   @impl true
-  def handle_call({:draw, player_id}, _from, state) do
+  def handle_call({:draw, _player_id}, _from, state) do
     {:reply, :ok, state}
   end
 
   @impl true
-  def handle_call({:accept_chain, player_id}, _from, state) do
+  def handle_call({:accept_chain, _player_id}, _from, state) do
     {:reply, :ok, state}
   end
 
   @impl true
-  def handle_call({:uno, player_id}, _from, state) do
+  def handle_call({:uno, _player_id}, _from, state) do
     {:reply, :ok, state}
   end
 
   @impl true
   def handle_info({:inactivity_timeout, player_id, sequence_number}, state) do
+    {:noreply, inactivity_timeout(state, player_id, sequence_number)}
   end
 
   @impl true
   def handle_info({:auto_play, player_id}, state) do
+    {:noreply, handle_auto_play(state, player_id)}
   end
 
   @impl true
   def handle_info({:uno_call_buffer, player_id, sequence_number}, state) do
+    {:noreply, expire_uno_call_buffer(state, player_id, sequence_number)}
   end
 end
