@@ -2,6 +2,7 @@ defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
 
   alias Uno.{Events, PubSub}
+  alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
   def mount(%{"id" => id}, _session, socket) do
@@ -9,8 +10,35 @@ defmodule UnoWeb.RoomLive do
     PubSub.subscribe({:room, id})
     PubSub.subscribe({:game, id})
 
-    {:ok, socket |> assign(:id, id) |> assign(:state, :lobby)}
+    # TODO: retrieve from session
+    player_id = Nanoid.generate()
+
+    {:ok,
+     socket
+     |> assign(room_id: id, player_id: player_id, state: :lobby)
+     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
   end
+
+  # --- Temporary, remove once more is implemented ---
+
+  def handle_event("room-update", %{"room" => params}, socket) do
+    changeset = RoomForm.changeset(params)
+
+    case RoomForm.parse(changeset) do
+      {:ok, data} ->
+        {:noreply,
+         assign(socket,
+           player_id: data.player_id,
+           state: data.state,
+           room_form: RoomForm.to_form(%{changeset | action: :validate})
+         )}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, room_form: RoomForm.to_form(changeset))}
+    end
+  end
+
+  # --- end temporary ---
 
   @forwarded_events %{
     Events.PlayerJoined => :room,

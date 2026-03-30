@@ -1,4 +1,9 @@
-<h1>Room: {@id}</h1>
+<h1>Room: {@room_id}</h1>
+
+<.form for={@room_form} phx-change="room-update" class="flex gap-x-4">
+  <.input field={@room_form[:player_id]} label="Player ID" />
+  <.input field={@room_form[:state]} label="State" type="select" options={[:lobby, :game]} />
+</.form>
 
 <.live_component :if={@state == :lobby} module={LobbyComponent} id="lobby" />
-<.live_component :if={@state == :game} module={GameComponent} id="game" />
+<.live_component :if={@state == :game} module={GameComponent} id="game" player_id={@player_id} />
