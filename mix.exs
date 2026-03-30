@@ -67,7 +67,8 @@ defmodule Uno.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:git_hooks, "~> 0.8", only: [:dev], runtime: false}
+      {:git_hooks, "~> 0.8", only: [:dev], runtime: false},
+      {:nanoid, "~> 2.1.0"}
     ]
   end
 
