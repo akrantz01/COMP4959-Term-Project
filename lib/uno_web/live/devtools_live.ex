@@ -4,8 +4,7 @@ defmodule UnoWeb.DevtoolsLive do
   alias Uno.Events
   alias Uno.PubSub
 
-  alias UnoWeb.Forms.{PublishEventForm, SubscriptionForm}
-  alias UnoWeb.Forms.PublishEvent.{CardBuilderForm, EventSelectorForm, HandEntryBuilderForm}
+  alias UnoWeb.Forms.{SubscriptionForm, Event}
 
   def mount(_params, _session, socket) do
     {:ok,
@@ -16,12 +15,9 @@ defmodule UnoWeb.DevtoolsLive do
      )
      |> assign(
        publish_event_type: nil,
-       publish_selector_form: EventSelectorForm.new(),
-       publish_form: nil,
-       publish_card_list: [],
-       publish_card_builder_form: nil,
-       publish_hand_list: [],
-       publish_hand_entry_builder_form: nil
+       publish_form_module: nil,
+       publish_form_data: nil,
+       publish_form: nil
      )
      |> stream(:events, [], reset: true)}
   end
@@ -51,111 +47,62 @@ defmodule UnoWeb.DevtoolsLive do
 
   # --- Publish event selection ---
 
-  def handle_event("publish-select-event", %{"event_selector" => params}, socket) do
-    case EventSelectorForm.parse(params) do
-      {:ok, %{event_type: type}} when type in [nil, ""] ->
-        {:noreply, reset_publish(socket)}
+  def handle_event("publish-select-event", %{"type" => type}, socket) do
+    case Event.form(type) do
+      {:ok, mod} ->
+        data = mod.new()
 
-      {:ok, %{event_type: event_type}} ->
-        changeset = %{EventSelectorForm.changeset(params) | action: :validate}
+        {:noreply,
+         assign(socket,
+           publish_event_type: type,
+           publish_form_module: mod,
+           publish_form_data: data,
+           publish_form: mod.changeset(data, %{}) |> to_form()
+         )}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Unknown event type: #{type}")}
+    end
+  end
+
+  # --- Event publishing ---
+
+  def handle_event("publish-validate", unsigned_params, socket) do
+    %{publish_form_module: mod, publish_form_data: data} = socket.assigns
+    params = Map.get(unsigned_params, Event.form_key(mod), %{})
+
+    changeset = mod.changeset(data, params)
+
+    {:noreply,
+     assign(socket,
+       publish_form_data: Ecto.Changeset.apply_changes(changeset),
+       publish_form: to_form(changeset, action: :validate)
+     )}
+  end
+
+  def handle_event("publish-submit", unsigned_params, socket) do
+    %{
+      publish_event_type: type,
+      publish_form_module: mod,
+      publish_form_data: data,
+      subscription: subscription
+    } =
+      socket.assigns
+
+    params = Map.get(unsigned_params, Event.form_key(mod), %{})
+
+    case mod.changeset(data, params) |> Ecto.Changeset.apply_action(:insert) do
+      {:ok, validated} ->
+        PubSub.broadcast({Event.topic(type), subscription.id}, mod.to_event(validated))
 
         {:noreply,
          socket
-         |> assign(
-           publish_event_type: event_type,
-           publish_selector_form: EventSelectorForm.to_form(changeset)
-         )
-         |> reset_publish_builders()}
+         |> put_flash(:info, "Published #{event_name(type)} event!")
+         |> reset_publish()}
 
       {:error, changeset} ->
-        {:noreply, assign(socket, publish_selector_form: EventSelectorForm.to_form(changeset))}
+        {:noreply, assign(socket, publish_form: to_form(changeset))}
     end
-  end
-
-  # --- Publish form validation ---
-
-  def handle_event("publish-change", params, socket) do
-    event_type = socket.assigns.publish_event_type
-    changeset = %{PublishEventForm.changeset(event_type, params["publish"]) | action: :validate}
-
-    {:noreply,
-     socket
-     |> assign(publish_form: PublishEventForm.to_form(changeset, event_type))
-     |> maybe_validate_card_builder(params["card_builder"], event_type)
-     |> maybe_validate_hand_entry_builder(params["hand_entry_builder"], event_type)}
-  end
-
-  # --- Publish submit ---
-
-  def handle_event("publish-submit", %{"publish" => params}, socket) do
-    %{publish_event_type: event_type, publish_card_list: card_list, subscription: sub} =
-      socket.assigns
-
-    topic_kind = PublishEventForm.topic_kind(event_type)
-
-    with :ok <- validate_subscription(sub, topic_kind),
-         :ok <- validate_card_list(event_type, card_list),
-         {:ok, data} <- PublishEventForm.parse(event_type, params) do
-      event =
-        PublishEventForm.build_event(
-          event_type,
-          data,
-          card_list,
-          socket.assigns.publish_hand_list
-        )
-
-      PubSub.broadcast({topic_kind, sub.id}, event)
-
-      {:noreply,
-       socket
-       |> put_flash(:info, "Event published")
-       |> reset_publish_builders()}
-    else
-      {:error, %Ecto.Changeset{} = changeset} ->
-        form = PublishEventForm.to_form(%{changeset | action: :validate}, event_type)
-        {:noreply, assign(socket, publish_form: form)}
-
-      {:error, message} ->
-        {:noreply, put_flash(socket, :error, message)}
-    end
-  end
-
-  # --- Card builder ---
-
-  def handle_event("add-card", _params, socket) do
-    mode = card_builder_mode(socket.assigns.publish_event_type)
-
-    {:noreply,
-     add_builder_item(
-       socket,
-       :publish_card_builder_form,
-       :publish_card_list,
-       CardBuilderForm.new(mode),
-       &CardBuilderForm.to_form/1
-     )}
-  end
-
-  def handle_event("remove-card", %{"index" => idx}, socket) do
-    {:noreply, remove_builder_item(socket, :publish_card_list, idx)}
-  end
-
-  # --- Hand entry builder ---
-
-  def handle_event("add-hand-entry", _params, socket) do
-    mode = hand_entry_mode(socket.assigns.publish_event_type)
-
-    {:noreply,
-     add_builder_item(
-       socket,
-       :publish_hand_entry_builder_form,
-       :publish_hand_list,
-       HandEntryBuilderForm.new(mode),
-       &HandEntryBuilderForm.to_form/1
-     )}
-  end
-
-  def handle_event("remove-hand-entry", %{"index" => idx}, socket) do
-    {:noreply, remove_builder_item(socket, :publish_hand_list, idx)}
   end
 
   # --- Pub/sub event receivers ---
@@ -199,85 +146,152 @@ defmodule UnoWeb.DevtoolsLive do
   end
 
   defp reset_publish(socket) do
-    socket
-    |> assign(
-      publish_event_type: nil,
-      publish_selector_form: EventSelectorForm.new()
-    )
-    |> reset_publish_builders()
-  end
-
-  defp reset_publish_builders(socket) do
-    event_type = socket.assigns.publish_event_type
-
     assign(socket,
-      publish_form: if(event_type, do: PublishEventForm.new(event_type)),
-      publish_card_list: [],
-      publish_card_builder_form: card_builder_for(event_type),
-      publish_hand_list: [],
-      publish_hand_entry_builder_form: hand_entry_builder_for(event_type)
+      publish_event_type: nil,
+      publish_form_module: nil,
+      publish_form_data: nil,
+      publish_form: nil
     )
   end
 
-  defp maybe_validate_card_builder(socket, nil, _event_type), do: socket
+  defp event_name(key) when is_atom(key), do: event_name(Atom.to_string(key))
 
-  defp maybe_validate_card_builder(socket, params, event_type) do
-    mode = card_builder_mode(event_type)
-    changeset = %{CardBuilderForm.changeset(params, mode) | action: :validate}
-    assign(socket, publish_card_builder_form: CardBuilderForm.to_form(changeset))
+  defp event_name(key) when is_binary(key),
+    do: String.split(key, "_") |> Enum.map_join(" ", &String.capitalize/1)
+
+  attr :form, Phoenix.HTML.Form, required: true
+
+  defp card_inputs(assigns) do
+    ~H"""
+    <div class="flex gap-2">
+      <.input
+        field={@form[:type]}
+        type="select"
+        label="Type"
+        prompt="Select..."
+        options={card_types()}
+      />
+      <.input
+        field={@form[:colour]}
+        type="select"
+        label="Colour"
+        prompt="Select..."
+        options={card_colours()}
+      />
+    </div>
+    """
   end
 
-  defp maybe_validate_hand_entry_builder(socket, nil, _event_type), do: socket
+  attr :form, Phoenix.HTML.Form, required: true
+  attr :show, :boolean, required: true
 
-  defp maybe_validate_hand_entry_builder(socket, params, event_type) do
-    mode = hand_entry_mode(event_type)
-    changeset = %{HandEntryBuilderForm.changeset(params, mode) | action: :validate}
-    assign(socket, publish_hand_entry_builder_form: HandEntryBuilderForm.to_form(changeset))
+  defp chain_fieldset(assigns) do
+    ~H"""
+    <fieldset class="border p-4 rounded">
+      <legend>Chain (optional)</legend>
+      <.input
+        field={@form[:has_chain]}
+        type="checkbox"
+        class="toggle"
+        label="Has chain?"
+      />
+      <.inputs_for
+        :let={chain}
+        :if={@show}
+        field={@form[:chain]}
+      >
+        <div class="flex gap-2">
+          <.input
+            field={chain[:type]}
+            type="select"
+            label="Type"
+            options={~w(draw_2 wild_draw_4)}
+            prompt="None"
+          />
+          <.input field={chain[:amount]} type="number" label="Amount" />
+        </div>
+      </.inputs_for>
+    </fieldset>
+    """
   end
 
-  defp add_builder_item(socket, form_key, list_key, fresh_form, to_form_fn) do
-    case Ecto.Changeset.apply_action(socket.assigns[form_key].source, :insert) do
-      {:ok, item} ->
-        assign(socket, [{list_key, socket.assigns[list_key] ++ [item]}, {form_key, fresh_form}])
+  attr :form, Phoenix.HTML.Form, required: true
 
-      {:error, changeset} ->
-        assign(socket, [{form_key, to_form_fn.(changeset)}])
-    end
+  defp top_card_fieldset(assigns) do
+    ~H"""
+    <fieldset class="border p-4 rounded">
+      <legend>Top Card</legend>
+      <.inputs_for :let={tc} field={@form[:top_card]}>
+        <.card_inputs form={tc} />
+      </.inputs_for>
+    </fieldset>
+    """
   end
 
-  defp remove_builder_item(socket, list_key, index) do
-    index = String.to_integer(index)
-    assign(socket, [{list_key, List.delete_at(socket.assigns[list_key], index)}])
+  attr :form, Phoenix.HTML.Form, required: true
+  attr :field, :atom, required: true
+  attr :sort, :atom, required: true
+  attr :drop, :atom, required: true
+  attr :label, :string, required: true
+  attr :add_label, :string, required: true
+  slot :item, required: true
+  slot :actions
+
+  defp embed_list(assigns) do
+    ~H"""
+    <fieldset class="border p-4 rounded space-y-2">
+      <legend>{@label}</legend>
+      <input type="hidden" name={"#{@form[@sort].name}[]"} />
+      <input type="hidden" name={"#{@form[@drop].name}[]"} />
+
+      <.inputs_for :let={f} field={@form[@field]}>
+        <input type="hidden" name={"#{@form[@sort].name}[]"} value={f.index} />
+        <div class="flex items-center gap-2">
+          {render_slot(@item, f)}
+          <.button
+            name={"#{@form[@drop].name}[]"}
+            value={f.index}
+            phx-click={JS.dispatch("change")}
+          >
+            ✕
+          </.button>
+        </div>
+      </.inputs_for>
+
+      <div class="flex justify-between">
+        <.button
+          type="button"
+          name={"#{@form[@sort].name}[]"}
+          value="new"
+          phx-click={JS.dispatch("change")}
+        >
+          + {@add_label}
+        </.button>
+        {render_slot(@actions)}
+      </div>
+    </fieldset>
+    """
   end
 
-  defp validate_subscription(%{id: id}, _) when id in [nil, ""],
-    do: {:error, "Enter a subscription ID first"}
+  defp card_colours(),
+    do: [{"Red", "red"}, {"Green", "green"}, {"Blue", "blue"}, {"Yellow", "yellow"}]
 
-  defp validate_subscription(sub, topic_kind) do
-    if Map.get(sub, topic_kind),
-      do: :ok,
-      else: {:error, "Subscribe to the #{topic_kind} topic first"}
-  end
-
-  defp validate_card_list(type, []) when type in ~w(cards_played cards_drawn),
-    do: {:error, "Add at least one card"}
-
-  defp validate_card_list(_, _), do: :ok
-
-  defp card_event?(type), do: type in ~w(cards_played cards_drawn)
-  defp hand_event?(type), do: type in ~w(cards_played cards_drawn sync)
-
-  defp card_builder_for(type) do
-    if card_event?(type), do: CardBuilderForm.new(card_builder_mode(type))
-  end
-
-  defp card_builder_mode("cards_drawn"), do: :drawn
-  defp card_builder_mode(_), do: :played
-
-  defp hand_entry_builder_for(type) do
-    if hand_event?(type), do: HandEntryBuilderForm.new(hand_entry_mode(type))
-  end
-
-  defp hand_entry_mode("sync"), do: :sync
-  defp hand_entry_mode(_), do: :default
+  defp card_types(),
+    do: [
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      {"Reverse", "reverse"},
+      {"Skip", "skip"},
+      {"Draw 2", "draw_2"},
+      {"Wild", "wild"},
+      {"Wild Draw 4", "wild_draw_4"}
+    ]
 end
