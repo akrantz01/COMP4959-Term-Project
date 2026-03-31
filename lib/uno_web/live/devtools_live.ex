@@ -115,7 +115,7 @@ defmodule UnoWeb.DevtoolsLive do
     case SubscriptionForm.parse(params) do
       {:ok, data} ->
         case socket.assigns do
-          %{subscriptions: old} ->
+          %{subscription: old} ->
             sync_channel(:room, old.id, old.room, data.id, data.room)
             sync_channel(:game, old.id, old.game, data.id, data.game)
 
