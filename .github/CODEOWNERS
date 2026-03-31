@@ -21,12 +21,12 @@ lib/uno/room.ex     @err0l-g @brandonlma @SherryNinja10
 lib/uno/room/       @err0l-g @brandonlma @SherryNinja10
 
 # Game - Server
-lib/game/server.ex  @baekanthony @Kairooe
-lib/game/server/    @baekanthony @Kairooe
+lib/uno/game/server.ex  @baekanthony @Kairooe
+lib/uno/game/server/    @baekanthony @Kairooe
 
 # Game - Logic
-lib/game/logic.ex   @whatinthepeta @SehajGill23 @dalel-aibyn
-lib/game/logic/     @whatinthepeta @SehajGill23 @dalel-aibyn
+lib/uno/game/logic.ex   @whatinthepeta @SehajGill23 @dalel-aibyn
+lib/uno/game/logic/     @whatinthepeta @SehajGill23 @dalel-aibyn
 
 # Infrastructure
 .github/                    @akrantz01
