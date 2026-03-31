@@ -20,7 +20,7 @@ defmodule Uno.Events do
   @type hand_card :: {colour(), card_type()} | card_wild()
   @type played_card :: {colour(), card_type()} | {card_wild(), colour()}
   @type direction :: :ltr | :rtl
-  @type penalties :: %{optional(player_id()) => non_neg_integer()}
+  @type penalties :: %{player_id() => non_neg_integer()}
   @type chain :: %{
           type: :draw_2 | :wild_draw_4,
           amount: pos_integer()
@@ -60,11 +60,11 @@ defmodule Uno.Events do
     The game was started by the room admin
     """
 
-    @enforce_keys [:room_id]
-    defstruct [:room_id]
+    @enforce_keys [:game_id]
+    defstruct [:game_id]
 
     @type t :: %__MODULE__{
-            room_id: String.t()
+            game_id: String.t()
           }
   end
 
@@ -88,15 +88,24 @@ defmodule Uno.Events do
     Synchronize the current game state with all the clients.
     """
 
-    @enforce_keys [:sequence, :top_card, :direction, :hands]
-    defstruct [:sequence, :top_card, :direction, :hands, vulnerable_player_id: nil, chain: nil]
+    @enforce_keys [:sequence, :top_card, :direction, :hands, :players]
+    defstruct [
+      :sequence,
+      :top_card,
+      :direction,
+      :hands,
+      :players,
+      vulnerable_player_id: nil,
+      chain: nil
+    ]
 
     @type t :: %__MODULE__{
             sequence: non_neg_integer(),
             top_card: Uno.Events.played_card(),
             direction: Uno.Events.direction(),
-            hands: %{String.t() => %{Uno.Events.played_card() => non_neg_integer()}},
-            vulnerable_player_id: String.t() | nil,
+            hands: %{String.t() => %{Uno.Events.hand_card() => non_neg_integer()}},
+            players: %{Uno.Events.player_id() => String.t()},
+            vulnerable_player_id: Uno.Events.player_id() | nil,
             chain: Uno.Events.chain() | nil
           }
   end
@@ -119,10 +128,10 @@ defmodule Uno.Events do
 
     @type t :: %__MODULE__{
             sequence: non_neg_integer(),
-            player_id: String.t(),
+            player_id: Uno.Events.player_id(),
             top_card: Uno.Events.played_card(),
             direction: Uno.Events.direction(),
-            vulnerable_player_id: String.t() | nil,
+            vulnerable_player_id: Uno.Events.player_id() | nil,
             skipped: boolean(),
             chain: Uno.Events.chain() | nil
           }
@@ -137,9 +146,9 @@ defmodule Uno.Events do
     defstruct [:player_id, :played_cards, :hand]
 
     @type t :: %__MODULE__{
-            player_id: String.t(),
+            player_id: Uno.Events.player_id(),
             played_cards: list(Uno.Events.played_card()),
-            hand: %{Uno.Events.played_card() => non_neg_integer()}
+            hand: %{Uno.Events.hand_card() => non_neg_integer()}
           }
   end
 
@@ -152,9 +161,9 @@ defmodule Uno.Events do
     defstruct [:player_id, :drawn_cards, :hand]
 
     @type t :: %__MODULE__{
-            player_id: String.t(),
+            player_id: Uno.Events.player_id(),
             drawn_cards: list(Uno.Events.hand_card()),
-            hand: %{Uno.Events.played_card() => non_neg_integer()}
+            hand: %{Uno.Events.hand_card() => non_neg_integer()}
           }
   end
 end
