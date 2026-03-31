@@ -12,4 +12,14 @@
       <p>Chain: {inspect(@chain)}</p>
     </div>
   </details>
+
+  <section class="flex flex-wrap flex-row gap-4 justify-center">
+    <div :for={opponent <- @opponents} class="card bg-neutral text-neutral-content w-32">
+      <div class="card-body items-center text-center">
+        <h3 class="card-title flex-grow">{opponent.name}</h3>
+        <%!-- TODO: add card icon --%>
+        <p class="flex-none">{opponent.cards}</p>
+      </div>
+    </div>
+  </section>
 </main>
