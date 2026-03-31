@@ -51,7 +51,13 @@ defmodule UnoWeb.CardComponents do
     }
   }
 
+  @sizes %{
+    md: ["w-30 h-45"],
+    lg: ["w-40 h-60"]
+  }
+
   attr :card, :any, required: true
+  attr :size, :atom, values: ~w(md lg)a, default: :md
   attr :class, :string, default: nil
   attr :rest, :global
 
@@ -63,6 +69,7 @@ defmodule UnoWeb.CardComponents do
       assign(assigns,
         wild?: wild?,
         played?: played?,
+        size: @sizes[assigns.size],
         color: color,
         c: c,
         value: value,
@@ -72,7 +79,8 @@ defmodule UnoWeb.CardComponents do
     ~H"""
     <div
       class={[
-        "w-40 h-60 rounded-2xl relative cursor-pointer select-none",
+        @size,
+        "rounded-2xl relative cursor-pointer select-none",
         "transition-all duration-200 ease-out",
         "shadow-[0_2px_4px_rgba(0,0,0,0.3),0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
         "hover:-translate-y-2 hover:scale-103",
