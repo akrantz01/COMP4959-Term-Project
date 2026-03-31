@@ -7,7 +7,6 @@ defmodule Uno.Game.Server do
   Handles all client interactions and timing-related behaviours.
   """
 
-  alias Uno.Game.Logic
   alias Phoenix.PubSub
 
   @doc """
@@ -75,10 +74,11 @@ defmodule Uno.Game.Server do
   # -------------------- Server Callbacks --------------------
 
   @impl true
-  def init({room_id, player_ids}) do
+  def init({room_id, _player_ids}) do
     PubSub.subscribe(Uno.PubSub, "game:#{room_id}")
 
-    initial_logic_state = Logic.new(player_ids)
+    # initial_logic_state = Logic.new(player_ids)
+    initial_logic_state = nil
 
     server_state = %{
       room_id: room_id,
