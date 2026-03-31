@@ -6,44 +6,18 @@ defmodule UnoWeb.DevtoolsLive do
 
   alias UnoWeb.Forms.{SubscriptionForm, Event}
 
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     {:ok,
      socket
-     |> assign(
-       subscription: %{id: nil, room: false, game: false},
-       subscribe_form: SubscriptionForm.new()
-     )
-     |> assign(
-       publish_event_type: nil,
-       publish_form_module: nil,
-       publish_form_data: nil,
-       publish_form: nil
-     )
+     |> subscribe(params)
+     |> reset_publish()
      |> stream(:events, [], reset: true)}
   end
 
   # --- Subscription events ---
 
-  def handle_event("subscribe-change", %{"subscription" => params}, socket) do
-    changeset = SubscriptionForm.changeset(params)
-
-    case SubscriptionForm.parse(params) do
-      {:ok, data} ->
-        sync_subscriptions(socket.assigns.subscription, data)
-
-        {:noreply,
-         socket
-         |> assign(
-           subscription: data,
-           subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate})
-         )
-         |> reset_publish()
-         |> stream(:events, [], reset: true)}
-
-      {:error, changeset} ->
-        {:noreply, assign(socket, subscribe_form: SubscriptionForm.to_form(changeset))}
-    end
-  end
+  def handle_event("subscribe-change", %{"subscription" => params}, socket),
+    do: {:noreply, subscribe(socket, params)}
 
   # --- Publish event selection ---
 
@@ -135,9 +109,34 @@ defmodule UnoWeb.DevtoolsLive do
 
   # --- Private helpers ---
 
-  defp sync_subscriptions(old, new) do
-    sync_channel(:room, old.id, old.room, new.id, new.room)
-    sync_channel(:game, old.id, old.game, new.id, new.game)
+  defp subscribe(socket, params) do
+    changeset = SubscriptionForm.changeset(params)
+
+    case SubscriptionForm.parse(params) do
+      {:ok, data} ->
+        case socket.assigns do
+          %{subscriptions: old} ->
+            sync_channel(:room, old.id, old.room, data.id, data.room)
+            sync_channel(:game, old.id, old.game, data.id, data.game)
+
+          _ ->
+            sync_channel(:room, nil, nil, data.id, data.room)
+            sync_channel(:game, nil, nil, data.id, data.game)
+        end
+
+        socket
+        |> assign(
+          subscription: data,
+          subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate})
+        )
+        |> reset_publish()
+        |> stream(:events, [], reset: true)
+
+      {:error, changeset} ->
+        socket
+        |> assign_new(:subscription, fn -> %{id: nil, room: false, game: false} end)
+        |> assign(:subscribe_form, SubscriptionForm.to_form(changeset))
+    end
   end
 
   defp sync_channel(kind, old_id, old_on, new_id, new_on) do
