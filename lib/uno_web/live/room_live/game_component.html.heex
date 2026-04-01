@@ -32,11 +32,40 @@
 
   <section></section>
 
-  <section class="flex flex-row justify-center gap-x-2 py-4 max-w-full min-h-50 overflow-x-auto">
-    <%= for {card, count} <- flatten_hand(@hand), _ <- 1..count do %>
-      <div>
-        <.uno_card card={card} />
-      </div>
-    <% end %>
+  <section
+    id="hand-scroll"
+    phx-hook=".HandScroll"
+    class="max-w-full min-h-50 overflow-x-auto"
+  >
+    <div class="flex flex-row justify-center gap-x-2 py-4 min-w-full w-fit">
+      <%= for {card, count} <- flatten_hand(@hand), _ <- 1..count do %>
+        <div>
+          <.uno_card card={card} />
+        </div>
+      <% end %>
+    </div>
   </section>
+  <script :type={Phoenix.LiveView.ColocatedHook} name=".HandScroll">
+    function update(el) {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      const l = scrollLeft > 1 ? "transparent, black 3rem," : "";
+      const r = scrollLeft + clientWidth < scrollWidth - 1 ? ",black calc(100% - 3rem), transparent" : "";
+      el.style.maskImage = (l || r) ? `linear-gradient(to right, ${l}black${r})` : "none";
+    }
+
+    export default {
+      mounted() {
+        this.onScroll = () => update(this.el);
+        this.el.addEventListener("scroll", this.onScroll);
+        this.observer = new ResizeObserver(() => update(this.el));
+        this.observer.observe(this.el);
+        update(this.el);
+      },
+      updated() { update(this.el); },
+      destroyed() {
+        this.el.removeEventListener("scroll", this.onScroll);
+        this.observer.disconnect();
+      },
+    };
+  </script>
 </div>
