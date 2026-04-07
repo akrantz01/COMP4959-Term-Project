@@ -38,7 +38,7 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
                     <div>
                       <div class="flex items-center gap-2">
                         <p class="font-semibold text-slate-900">{player.name}</p>
-                        <%= if player.last_winner do %>
+                        <%= if Map.get(player, :last_winner, false) do %>
                           <span class="text-sm">👑</span>
                         <% end %>
                       </div>
@@ -87,14 +87,14 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
               <%= if @is_admin do %>
                 <button
                   phx-click="start_game"
-                  disabled={@connected_count <= 2}
+                  disabled={@connected_count < 2}
                   class="mt-4 w-full rounded-2xl bg-[linear-gradient(180deg,#ffe352_0%,#ffb400_100%)] px-6 py-3 text-lg font-black text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Start Game
                 </button>
 
                 <p class="mt-3 text-sm text-slate-500">
-                  Need at least 3 connected players.
+                  Need at least 2 connected players.
                 </p>
               <% else %>
                 <p class="mt-3 text-sm text-slate-500">
