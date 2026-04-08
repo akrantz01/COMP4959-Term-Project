@@ -1,4 +1,5 @@
 defmodule Uno.Room do
+  @moduledoc false
   use GenServer
 
   alias Uno.Events
@@ -10,10 +11,6 @@ defmodule Uno.Room do
             admin_player_id: nil,
             last_winner_player_id: nil,
             games_played: 0
-
-  # --------------------
-  # Public API
-  # --------------------
 
   def start_link(room_id) do
     GenServer.start_link(__MODULE__, room_id, name: via(room_id))
@@ -60,10 +57,6 @@ defmodule Uno.Room do
     {:via, Registry, {Uno.RoomRegistry, room_id}}
   end
 
-  # --------------------
-  # GenServer callbacks
-  # --------------------
-
   @impl true
   def init(room_id) do
     {:ok, %__MODULE__{id: room_id}}
@@ -75,40 +68,40 @@ defmodule Uno.Room do
   end
 
   def handle_call({:join, player_id, name}, _from, state) do
-    cond do
-      state.state != :lobby ->
-        {:reply, {:error, :room_not_in_lobby}, state}
+    if state.state != :lobby do
+      {:reply, {:error, :room_not_in_lobby}, state}
+    else
+      trimmed_name = String.trim(name)
 
-      true ->
-        existing =
-          Map.get(state.players, player_id, %{
-            player_id: player_id,
-            name: name,
-            connected: true,
-            wins: 0,
-            losses: 0
-          })
-
-        updated_player =
-          existing
-          |> Map.put(:name, name)
-          |> Map.put(:connected, true)
-
-        updated_players = Map.put(state.players, player_id, updated_player)
-
-        updated_state =
-          if state.admin_player_id do
-            %{state | players: updated_players}
-          else
-            %{state | players: updated_players, admin_player_id: player_id}
-          end
-
-        PubSub.broadcast({:room, state.id}, %Events.PlayerJoined{
+      existing =
+        Map.get(state.players, player_id, %{
           player_id: player_id,
-          name: updated_player.name
+          name: trimmed_name,
+          connected: true,
+          wins: 0,
+          losses: 0
         })
 
-        {:reply, {:ok, updated_state}, updated_state}
+      updated_player =
+        existing
+        |> Map.put(:name, trimmed_name)
+        |> Map.put(:connected, true)
+
+      updated_players = Map.put(state.players, player_id, updated_player)
+
+      updated_state =
+        if state.admin_player_id do
+          %{state | players: updated_players}
+        else
+          %{state | players: updated_players, admin_player_id: player_id}
+        end
+
+      PubSub.broadcast({:room, state.id}, %Events.PlayerJoined{
+        player_id: player_id,
+        name: updated_player.name
+      })
+
+      {:reply, {:ok, updated_state}, updated_state}
     end
   end
 
@@ -124,10 +117,16 @@ defmodule Uno.Room do
         {:reply, {:error, :player_not_found}, state}
 
       true ->
-        updated_players =
-          update_in(state.players[player_id][:name], fn _ -> String.trim(name) end)
+        trimmed_name = String.trim(name)
 
+        updated_player =
+          state.players
+          |> Map.fetch!(player_id)
+          |> Map.put(:name, trimmed_name)
+
+        updated_players = Map.put(state.players, player_id, updated_player)
         updated_state = %{state | players: updated_players}
+
         {:reply, {:ok, updated_state}, updated_state}
     end
   end
@@ -167,19 +166,7 @@ defmodule Uno.Room do
       player ->
         updated_player = %{player | connected: false}
         updated_players = Map.put(state.players, player_id, updated_player)
-
-        updated_admin =
-          if state.admin_player_id == player_id do
-            updated_players
-            |> Map.values()
-            |> Enum.find(& &1.connected)
-            |> case do
-              nil -> nil
-              p -> p.player_id
-            end
-          else
-            state.admin_player_id
-          end
+        updated_admin = next_admin_player_id(state, updated_players, player_id)
 
         updated_state = %{state | players: updated_players, admin_player_id: updated_admin}
 
@@ -191,9 +178,19 @@ defmodule Uno.Room do
     end
   end
 
-  # --------------------
-  # Helpers
-  # --------------------
+  defp next_admin_player_id(state, updated_players, leaving_player_id) do
+    if state.admin_player_id == leaving_player_id do
+      updated_players
+      |> Map.values()
+      |> Enum.find(& &1.connected)
+      |> case do
+        nil -> nil
+        player -> player.player_id
+      end
+    else
+      state.admin_player_id
+    end
+  end
 
   defp generate_room_id do
     :crypto.strong_rand_bytes(4)

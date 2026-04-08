@@ -52,8 +52,8 @@ defmodule UnoWeb.PageController do
 
   defp get_or_create_player_id(conn) do
     get_session(conn, :player_id) ||
-      (:crypto.strong_rand_bytes(8)
-       |> Base.url_encode64(padding: false)
-       |> binary_part(0, 10))
+      :crypto.strong_rand_bytes(8)
+      |> Base.url_encode64(padding: false)
+      |> binary_part(0, 10)
   end
 end

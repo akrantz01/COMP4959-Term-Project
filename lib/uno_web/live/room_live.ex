@@ -36,7 +36,7 @@ defmodule UnoWeb.RoomLive do
              |> assign(:id, id)
              |> assign(:state, joined_state.state)
              |> assign(:player_id, player_id)
-             |> assign(:player_name, joined_state.players[player_id].name)
+             |> assign(:player_name, get_in(joined_state.players, [player_id, :name]))
              |> assign(:is_admin, joined_state.admin_player_id == player_id)
              |> assign(:players, decorate_players(joined_state))
              |> assign(:last_winner_player_id, joined_state.last_winner_player_id)}
@@ -91,7 +91,7 @@ defmodule UnoWeb.RoomLive do
       {:ok, room_state} ->
         {:noreply,
          socket
-         |> assign(:player_name, room_state.players[socket.assigns.player_id].name)
+         |> assign(:player_name, get_in(room_state.players, [socket.assigns.player_id, :name]))
          |> assign(:players, decorate_players(room_state))
          |> put_flash(:info, "Display name updated.")}
 
