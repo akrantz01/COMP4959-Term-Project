@@ -35,6 +35,40 @@ defmodule Uno.Game.Logic do
     deck |> Enum.shuffle()
   end
 
+  # Task 2
+  @spec init([player()]) :: t()
+  def init(players) do
+
+    deck = generate_deck() |> shuffle_deck()
+
+    # Deals hands from the deck to each player
+    {hands, deck} =
+      Enum.reduce(players, {%{}, deck}, fn {player_id, _name}, {hands, remaining_deck} ->
+        {cards, remaining_deck} = Enum.split(remaining_deck, @hand_size)
+        hand = Enum.frequencies(cards)
+        {Map.put(hands, player_id, hand), remaining_deck}
+      end)
+
+    # Flipping the first card (starting card)
+    {top_card, deck} = flip_starting_card(deck)
+
+    # initializes queue
+    players_queue =
+      players
+      |> :queue.from_list()
+
+    # Setting the game instance
+    %__MODULE__{
+      sequence: 0,
+      deck: deck,
+      hands: hands,
+      players: players_queue,
+      top_card: top_card,
+      direction: :ltr
+    }
+
+  end
+
   defp flip_starting_card(deck) do
     {[card | rest], deck} = Enum.split(deck, 1)
 
