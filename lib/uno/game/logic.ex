@@ -35,4 +35,19 @@ defmodule Uno.Game.Logic do
     deck |> Enum.shuffle()
   end
 
+  defp flip_starting_card(deck) do
+    {[card | rest], deck} = Enum.split(deck, 1)
+
+    case card do
+      # Not allowed to start with a wild card - flips until we get a non-wild card
+      wild when wild in [:wild, :wild_draw_4] ->
+        # Put it at the bottom and try again
+        flip_starting_card(rest ++ [wild])
+
+      {colour, type} ->
+        {{colour, type}, deck ++ rest}
+    end
+  end
+
+
 end
