@@ -1,23 +1,16 @@
 defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
 
-  # alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
-
-  def mount(%{"room_id" => room_id}, _session, socket) do
-    player_id = socket.assigns[:player_id] || Nanoid.generate()
+  def mount(%{"room_id" => room_id}, session, socket) do
+    player_id = session["player_id"] || Nanoid.generate()
+    player_name = "Player-" <> String.slice(player_id, 0, 4)
 
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Uno.PubSub, "room:#{room_id}")
-      Uno.Room.join(room_id, player_id)
     end
 
-    {:ok,
-     assign(socket,
-       room_id: room_id,
-       player_id: player_id,
-       players: [],
-       status: :waiting
-     )}
+    {:ok, room_state} = Uno.Room.join(room_id, player_id, player_name)
+    {:ok, assign_from_state(socket, room_state, player_id, room_id)}
   end
 
   def terminate(_reason, socket) do
@@ -25,33 +18,51 @@ defmodule UnoWeb.RoomLive do
     :ok
   end
 
-  ## HANDLE PUBSUB EVENTS
-
-  def handle_info({:player_joined, player_id}, socket) do
-    {:noreply, update(socket, :players, fn p -> Enum.uniq([player_id | p]) end)}
+  def handle_info({:room_updated, room_state}, socket) do
+    {:noreply,
+     assign_from_state(
+       socket,
+       room_state,
+       socket.assigns.player_id,
+       socket.assigns.room_id
+     )}
   end
 
-  def handle_info({:player_left, player_id}, socket) do
-    {:noreply, update(socket, :players, fn p -> List.delete(p, player_id) end)}
-  end
+  def handle_event("update_name", %{"player_name" => player_name}, socket) do
+    Uno.Room.rename_player(
+      socket.assigns.room_id,
+      socket.assigns.player_id,
+      player_name
+    )
 
-  def handle_info({:game_started, _}, socket) do
-    {:noreply, assign(socket, status: :playing)}
+    {:noreply, socket}
   end
-
-  def handle_info({:game_ended, _}, socket) do
-    {:noreply, assign(socket, status: :ended)}
-  end
-
-  ## UI EVENTS
 
   def handle_event("start_game", _, socket) do
-    Uno.Room.start_game(socket.assigns.room_id)
+    Uno.Room.start_game(
+      socket.assigns.room_id,
+      socket.assigns.player_id
+    )
+
     {:noreply, socket}
   end
 
-  def handle_event("end_game", _, socket) do
-    Uno.Room.end_game(socket.assigns.room_id)
-    {:noreply, socket}
+  defp assign_from_state(socket, room_state, player_id, room_id) do
+    players =
+      room_state.players
+      |> Enum.sort_by(& &1.name)
+
+    current_player =
+      Enum.find(players, fn p -> p.id == player_id end)
+
+    assign(socket,
+      room_id: room_id,
+      player_id: player_id,
+      player_name: (current_player && current_player.name) || "Player",
+      players: players,
+      status: room_state.status,
+      is_admin: room_state.admin_player_id == player_id,
+      last_winner_player_id: room_state.last_winner_player_id
+    )
   end
 end

@@ -1,11 +1,14 @@
-<h1>Room: {@room_id}</h1>
+<h1 class="sr-only">Room: {@room_id}</h1>
 
 <.live_component
   :if={@status == :waiting}
   module={UnoWeb.RoomLive.LobbyComponent}
   id="lobby"
+  room_id={@room_id}
   players={@players}
-  status={@status}
+  player_name={@player_name}
+  is_admin={@is_admin}
+  last_winner_player_id={@last_winner_player_id}
 />
 
 <.live_component
