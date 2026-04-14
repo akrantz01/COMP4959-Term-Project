@@ -2,8 +2,8 @@ import Config
 
 # Configure your database
 config :uno, Uno.Repo,
-  username: System.get_env("DATABASE_USERNAME") || "uno",
-  password: System.get_env("DATABASE_PASSWORD") || "super-secure-password",
+  username: System.get_env("DATABASE_USERNAME") || "postgres",
+  password: System.get_env("DATABASE_PASSWORD") || "postgres",
   hostname: System.get_env("DATABASE_HOST") || "127.0.0.1",
   database: System.get_env("DATABASE_NAME") || "uno_dev",
   stacktrace: true,
@@ -58,12 +58,12 @@ config :uno, UnoWeb.Endpoint,
     web_console_logger: true,
     patterns: [
       # Static assets, except user uploads
-      ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$"E,
+      ~r"priv/static/(?!uploads/).*\.(js|css|png|jpeg|jpg|gif|svg)$",
       # Gettext translations
-      ~r"priv/gettext/.*\.po$"E,
+      ~r"priv/gettext/.*\.po$",
       # Router, Controllers, LiveViews and LiveComponents
-      ~r"lib/uno_web/router\.ex$"E,
-      ~r"lib/uno_web/(controllers|live|components)/.*\.(ex|heex)$"E
+      ~r"lib/uno_web/router\.ex$",
+      ~r"lib/uno_web/(controllers|live|components)/.*\.(ex|heex)$"
     ]
   ]
 

@@ -1,4 +1,15 @@
-<h1>Room: {@id}</h1>
+<h1>Room: {@room_id}</h1>
 
-<.live_component :if={@state == :lobby} module={LobbyComponent} id="lobby" />
-<.live_component :if={@state == :game} module={GameComponent} id="game" />
+<.live_component
+  :if={@status == :waiting}
+  module={UnoWeb.RoomLive.LobbyComponent}
+  id="lobby"
+  players={@players}
+  status={@status}
+/>
+
+<.live_component
+  :if={@status == :playing}
+  module={UnoWeb.RoomLive.GameComponent}
+  id="game"
+/>
