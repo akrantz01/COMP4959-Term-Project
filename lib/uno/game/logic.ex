@@ -83,5 +83,11 @@ defmodule Uno.Game.Logic do
     end
   end
 
+  # Task 3
+  @spec current_turn(t()) :: player_id()
+  def current_turn(%__MODULE__{players: players}) do
+    {{:value, {player_id, _name}}, _} = :queue.peek(players)
+    player_id
+  end
 
 end
