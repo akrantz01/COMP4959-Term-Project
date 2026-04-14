@@ -1,0 +1,4 @@
+<h1>Room: {@id}</h1>
+
+<.live_component :if={@state == :lobby} module={LobbyComponent} id="lobby" />
+<.live_component :if={@state == :game} module={GameComponent} id="game" />

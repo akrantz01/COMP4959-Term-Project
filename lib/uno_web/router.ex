@@ -18,8 +18,6 @@ defmodule UnoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    post "/room/create", PageController, :create_room
-    post "/room/join", PageController, :join_room
     live "/room/:id", RoomLive
   end
 
