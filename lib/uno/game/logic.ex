@@ -31,5 +31,8 @@ defmodule Uno.Game.Logic do
     colour_cards |> List.flatten() |> Kernel.++(wildcards)
   end
 
+  def shuffle_deck(deck) do
+    deck |> Enum.shuffle()
+  end
 
 end
