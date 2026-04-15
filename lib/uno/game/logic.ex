@@ -13,13 +13,13 @@ defmodule Uno.Game.Logic do
   @type player :: {player_id(), String.t()}
   @type direction :: :ltr | :rtl
   @type t :: %__MODULE__{
-    sequence: non_neg_integer(),
-    deck: [hand_card()],
-    hands: %{player_id() => [hand_card()]},
-    players: :queue.queue(player()),
-    top_card: played_card() | nil,
-    direction: direction()
-  }
+          sequence: non_neg_integer(),
+          deck: [hand_card()],
+          hands: %{player_id() => [hand_card()]},
+          players: :queue.queue(player()),
+          top_card: played_card() | nil,
+          direction: direction()
+        }
 
   defstruct sequence: 0,
             deck: [],
@@ -58,7 +58,6 @@ defmodule Uno.Game.Logic do
   # Task 2
   @spec init([player()]) :: t()
   def init(players) do
-
     deck = generate_deck() |> shuffle_deck()
 
     # Deals hands from the deck to each player
@@ -86,7 +85,6 @@ defmodule Uno.Game.Logic do
       top_card: top_card,
       direction: :ltr
     }
-
   end
 
   defp flip_starting_card(deck) do
@@ -110,4 +108,9 @@ defmodule Uno.Game.Logic do
     player_id
   end
 
+  #GL-4
+  @spec player_hands(t()) :: %{player_id() => [hand_card()]}
+  def player_hands(%__MODULE__{hands: hands}) do
+    hands
+  end 
 end
