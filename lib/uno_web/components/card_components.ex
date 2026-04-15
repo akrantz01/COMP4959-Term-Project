@@ -56,6 +56,33 @@ defmodule UnoWeb.CardComponents do
     lg: ["w-40 h-60"]
   }
 
+  attr :size, :atom, values: ~w(md lg)a, default: :md
+  attr :class, :string, default: nil
+  attr :rest, :global
+
+  def flipped_card(assigns) do
+    assigns = assign(assigns, :size, @sizes[assigns.size])
+
+    ~H"""
+    <div
+      class={[
+        @size,
+        "rounded-2xl relative select-none",
+        "bg-black",
+        "shadow-[0_2px_4px_rgba(0,0,0,0.3),0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
+        @class
+      ]}
+      {@rest}
+    >
+      <div class="absolute top-4.5 bottom-4.5 left-3.5 right-3.5 [border-radius:50%/46%] -rotate-12 bg-[#d72600] flex items-center justify-center overflow-hidden shadow-[0_0_0_3px_rgba(255,255,255,0.15)]">
+        <span class="transform-[perspective(1px)_rotate(78deg)] text-4xl font-black text-white tracking-widest [text-shadow:2px_2px_4px_rgba(0,0,0,0.4)]">
+          UNO
+        </span>
+      </div>
+    </div>
+    """
+  end
+
   attr :card, :any, required: true
   attr :size, :atom, values: ~w(md lg)a, default: :md
   attr :class, :string, default: nil
