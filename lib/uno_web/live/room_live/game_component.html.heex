@@ -30,7 +30,11 @@
     </div>
   </section>
 
-  <section></section>
+  <section class="flex justify-center items-center">
+    <div :if={@top_card != nil}>
+      <.uno_card size={:lg} card={@top_card} />
+    </div>
+  </section>
 
   <section
     id="hand-scroll"
