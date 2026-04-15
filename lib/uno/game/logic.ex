@@ -101,6 +101,22 @@ defmodule Uno.Game.Logic do
     end
   end
 
+  # GL-5
+  @spec playable_card?(hand_card(), played_card()) :: boolean()
+  defp playable_card?(card, _top_card) when card in [:wild, :wild_draw_4], do: true
+
+  defp playable_card?({colour, _type}, {:wild, active_colour}) do
+    colour == active_colour
+  end
+
+  defp playable_card?({colour, _type}, {:wild_draw_4, active_colour}) do
+    colour == active_colour
+  end
+
+  defp playable_card?({colour, type}, {top_colour, top_type}) do
+    colour == top_colour or type == top_type
+  end
+
   # Task 3
   @spec current_turn(t()) :: player_id()
   def current_turn(%__MODULE__{players: players}) do
@@ -108,9 +124,17 @@ defmodule Uno.Game.Logic do
     player_id
   end
 
-  #GL-4
+  # GL-4
   @spec player_hands(t()) :: %{player_id() => [hand_card()]}
   def player_hands(%__MODULE__{hands: hands}) do
     hands
-  end 
+  end
+
+  # GL-6
+  @spec next_playable_card(t(), player_id()) :: hand_card() | nil
+  def next_playable_card(%__MODULE__{hands: hands, top_card: top_card}, player_id) do
+    hands
+    |> Map.get(player_id, [])
+    |> Enum.find(fn card -> playable_card?(card, top_card) end)
+  end
 end
