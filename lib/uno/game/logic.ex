@@ -64,8 +64,7 @@ defmodule Uno.Game.Logic do
     {hands, deck} =
       Enum.reduce(players, {%{}, deck}, fn {player_id, _name}, {hands, remaining_deck} ->
         {cards, remaining_deck} = Enum.split(remaining_deck, @hand_size)
-        hand = cards
-        {Map.put(hands, player_id, hand), remaining_deck}
+        {Map.put(hands, player_id, cards), remaining_deck}
       end)
 
     # Flipping the first card (starting card)
@@ -103,6 +102,8 @@ defmodule Uno.Game.Logic do
 
   # GL-5
   @spec playable_card?(hand_card(), played_card()) :: boolean()
+  defp playable_card?(_card, nil), do: false
+
   defp playable_card?(card, _top_card) when card in [:wild, :wild_draw_4], do: true
 
   defp playable_card?({colour, _type}, {:wild, active_colour}) do
