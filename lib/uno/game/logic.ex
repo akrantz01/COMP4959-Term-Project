@@ -8,6 +8,26 @@ defmodule Uno.Game.Logic do
   @type hand_card :: {colour(), card_type()} | card_wild()
   @type played_card :: {colour(), card_type()} | {card_wild(), colour()}
 
+  @hand_size 7
+  @type player_id :: String.t()
+  @type player :: {player_id(), String.t()}
+  @type direction :: :ltr | :rtl
+  @type t :: %__MODULE__{
+    sequence: non_neg_integer(),
+    deck: [hand_card()],
+    hands: %{player_id() => [hand_card()]},
+    players: :queue.queue(player()),
+    top_card: played_card() | nil,
+    direction: direction()
+  }
+
+  defstruct sequence: 0,
+            deck: [],
+            hands: %{},
+            players: :queue.new(),
+            top_card: nil,
+            direction: :ltr
+
   # task 1
   @spec generate_deck() :: [hand_card()]
   def generate_deck do
@@ -45,17 +65,17 @@ defmodule Uno.Game.Logic do
     {hands, deck} =
       Enum.reduce(players, {%{}, deck}, fn {player_id, _name}, {hands, remaining_deck} ->
         {cards, remaining_deck} = Enum.split(remaining_deck, @hand_size)
-        hand = Enum.frequencies(cards)
+        hand = cards
         {Map.put(hands, player_id, hand), remaining_deck}
       end)
 
     # Flipping the first card (starting card)
     {top_card, deck} = flip_starting_card(deck)
 
-    # initializes queue
-    players_queue =
-      players
-      |> :queue.from_list()
+    # initializes queue, the rules specifies a random player should join first.
+    start_index = Enum.random(0..(length(players) - 1))
+    rotated_players = Enum.drop(players, start_index) ++ Enum.take(players, start_index)
+    players_queue = :queue.from_list(rotated_players)
 
     # Setting the game instance
     %__MODULE__{
@@ -70,7 +90,7 @@ defmodule Uno.Game.Logic do
   end
 
   defp flip_starting_card(deck) do
-    {[card | rest], deck} = Enum.split(deck, 1)
+    {[card], rest} = Enum.split(deck, 1)
 
     case card do
       # Not allowed to start with a wild card - flips until we get a non-wild card
@@ -79,14 +99,14 @@ defmodule Uno.Game.Logic do
         flip_starting_card(rest ++ [wild])
 
       {colour, type} ->
-        {{colour, type}, deck ++ rest}
+        {{colour, type}, rest}
     end
   end
 
   # Task 3
   @spec current_turn(t()) :: player_id()
   def current_turn(%__MODULE__{players: players}) do
-    {{:value, {player_id, _name}}, _} = :queue.peek(players)
+    {:value, {player_id, _name}} = :queue.peek(players)
     player_id
   end
 
