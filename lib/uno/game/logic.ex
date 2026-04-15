@@ -7,6 +7,8 @@ defmodule Uno.Game.Logic do
   @type card_wild :: :wild | :wild_draw_4
   @type hand_card :: {colour(), card_type()} | card_wild()
   @type played_card :: {colour(), card_type()} | {card_wild(), colour()}
+  @type chain_type :: :draw_2 | :wild_draw_4
+  @type chain :: %{type: chain_type(), amount: pos_integer()}
 
   @hand_size 7
   @type player_id :: String.t()
@@ -101,7 +103,7 @@ defmodule Uno.Game.Logic do
   end
 
   # GL-5
-  @spec playable_card?(hand_card(), played_card()) :: boolean()
+  @spec playable_card?(hand_card(), played_card() | nil) :: boolean()
   defp playable_card?(_card, nil), do: false
 
   defp playable_card?(card, _top_card) when card in [:wild, :wild_draw_4], do: true
@@ -137,5 +139,147 @@ defmodule Uno.Game.Logic do
     hands
     |> Map.get(player_id, [])
     |> Enum.find(fn card -> playable_card?(card, top_card) end)
+  end
+
+  # helper to count the card type
+  @spec count_card_type([played_card()], card_type()) :: non_neg_integer()
+  defp count_card_type(played_cards, type) do
+    Enum.count(played_cards, fn
+      {_colour, ^type} -> true
+      _ -> false
+    end)
+  end
+
+  # GL-8 (Helper function to flip direction)
+  @spec apply_reverse(direction(), [played_card()]) :: {direction(), boolean()}
+  def apply_reverse(direction, played_cards) do
+    reverse_count = count_card_type(played_cards, :reverse)
+
+    new_direction =
+      if rem(reverse_count, 2) == 1 do
+        flip_direction(direction)
+      else
+        direction
+      end
+
+    {new_direction, new_direction != direction}
+  end
+
+  @spec flip_direction(direction()) :: direction()
+  def flip_direction(:ltr), do: :rtl
+  def flip_direction(:rtl), do: :ltr
+
+  # Gl-9 (Helper function to count the number of skips)
+  @spec apply_skip([played_card()]) :: non_neg_integer()
+  def apply_skip(played_cards) do
+    count_card_type(played_cards, :skip)
+  end
+
+  # GL-10
+  @spec apply_chain(chain() | nil, [played_card()]) ::
+          {:ok, chain() | nil} | {:error, :mixed_chain}
+  def apply_chain(chain, played_cards) do
+    draw_2_count =
+      Enum.count(played_cards, fn
+        {_colour, :draw_2} -> true
+        _ -> false
+      end)
+
+    wild_draw_4_count =
+      Enum.count(played_cards, fn
+        {:wild_draw_4, _colour} -> true
+        _ -> false
+      end)
+
+    cond do
+      draw_2_count > 0 and wild_draw_4_count > 0 ->
+        {:error, :mixed_chain}
+
+      draw_2_count > 0 ->
+        apply_draw_2_chain(chain, draw_2_count)
+
+      wild_draw_4_count > 0 ->
+        apply_wild_draw_4_chain(chain, wild_draw_4_count)
+
+      true ->
+        {:ok, chain}
+    end
+  end
+
+  @spec apply_draw_2_chain(chain() | nil, non_neg_integer()) ::
+          {:ok, chain()} | {:error, :mixed_chain}
+  def apply_draw_2_chain(nil, count) do
+    {:ok, %{type: :draw_2, amount: count * 2}}
+  end
+
+  def apply_draw_2_chain(%{type: :draw_2, amount: amount}, count) do
+    {:ok, %{type: :draw_2, amount: amount + count * 2}}
+  end
+
+  def apply_draw_2_chain(%{type: :wild_draw_4}, _count) do
+    {:error, :mixed_chain}
+  end
+
+  @spec apply_wild_draw_4_chain(chain() | nil, non_neg_integer()) ::
+          {:ok, chain()} | {:error, :mixed_chain}
+  def apply_wild_draw_4_chain(nil, count) do
+    {:ok, %{type: :wild_draw_4, amount: count * 4}}
+  end
+
+  def apply_wild_draw_4_chain(%{type: :wild_draw_4, amount: amount}, count) do
+    {:ok, %{type: :wild_draw_4, amount: amount + count * 4}}
+  end
+
+  def apply_wild_draw_4_chain(%{type: :draw_2}, _count) do
+    {:error, :mixed_chain}
+  end
+
+  # GL-11
+  # Validates that a multi-card play is internally legal
+  # same number/type for normal cards, or same wild type for wild cards.
+  @spec valid_multi_play?([played_card()]) :: boolean()
+  def valid_multi_play?([]), do: false
+  def valid_multi_play?([_single_card]), do: true
+
+  def valid_multi_play?(played_cards) do
+    cond do
+      all_same_normal_type?(played_cards) -> true
+      all_same_wild_type?(played_cards) -> true
+      true -> false
+    end
+  end
+
+  @spec all_same_normal_type?([played_card()]) :: boolean()
+  def all_same_normal_type?(played_cards) do
+    case played_cards do
+      [{first_colour, first_type} | rest] when first_colour in [:red, :green, :blue, :yellow] ->
+        Enum.all?(rest, fn
+          {colour, type} when colour in [:red, :green, :blue, :yellow] ->
+            type == first_type
+
+          _ ->
+            false
+        end)
+
+      _ ->
+        false
+    end
+  end
+
+  @spec all_same_wild_type?([played_card()]) :: boolean()
+  def all_same_wild_type?(played_cards) do
+    case played_cards do
+      [{first_wild_type, _first_colour} | rest] when first_wild_type in [:wild, :wild_draw_4] ->
+        Enum.all?(rest, fn
+          {wild_type, _colour} when wild_type in [:wild, :wild_draw_4] ->
+            wild_type == first_wild_type
+
+          _ ->
+            false
+        end)
+
+      _ ->
+        false
+    end
   end
 end
