@@ -86,6 +86,39 @@ defmodule UnoWeb.DevtoolsLive do
     end
   end
 
+  # --- Scenario handling ---
+
+  def handle_event("scenario-change", _params, socket), do: {:noreply, socket}
+
+  def handle_event("scenario-run", _params, %{assigns: %{replaying: true}} = socket),
+    do: {:noreply, socket}
+
+  def handle_event("scenario-run", _params, socket) do
+    result =
+      consume_uploaded_entries(socket, :scenario, fn %{path: path}, _entry ->
+        {:ok, File.read!(path)}
+      end)
+
+    case result do
+      [json] ->
+        with {:ok, decoded} <- Jason.decode(json),
+             {:ok, validated} <- validate_scenario(decoded, socket.assigns.subscription) do
+          IO.inspect(validated) # TODO: replay all events in sequence
+          {:noreply, assign(socket, replaying: true, publish_tab: :scenario)}
+        else
+          {:error, reason} when is_exception(reason) ->
+            {:noreply,
+             put_flash(socket, :error, "Invalid scenario JSON: #{Exception.message(reason)}")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Scenario error: #{reason}")}
+        end
+
+      [] ->
+        {:noreply, put_flash(socket, :error, "No file uploaded")}
+    end
+  end
+
   # --- Pub/sub event receivers ---
 
   @event_sources %{
@@ -158,6 +191,33 @@ defmodule UnoWeb.DevtoolsLive do
       publish_form_data: nil,
       publish_form: nil
     )
+  end
+
+  defp validate_scenario(entries, subscription) do
+    if(is_list(entries), do: entries, else: [entries])
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {entry, idx}, {:ok, acc} ->
+      validate_scenario_event(idx, entry, subscription, acc)
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
+  end
+
+  defp validate_scenario_event(idx, entry, subscription, acc) do
+    with %{"event" => type} <- entry,
+         delay_ms = if(idx == 0, do: 0, else: Map.get(entry, "delay_ms", 0)),
+         params = Map.get(entry, "params", %{}),
+         {:ok, mod} <- Event.form(type),
+         {:ok, validated} <-
+           mod.changeset(mod.new(), params) |> Ecto.Changeset.apply_action(:insert) do
+      topic = {Event.topic(type), subscription.id}
+
+      {:cont, {:ok, [{delay_ms, topic, mod.to_event(validated)} | acc]}}
+    else
+      _ -> {:halt, {:error, "invalid entry at index #{idx}"}}
+    end
   end
 
   defp event_name(key) when is_atom(key), do: event_name(Atom.to_string(key))
