@@ -39,7 +39,7 @@ defmodule Uno.Room do
   The type definition for the Uno.Room struct.
   """
   @type t :: %__MODULE__{
-          room_id: String.t(),
+          room_id: Uno.Events.room_id(),
           state: room_state(),
           players: %{String.t() => player_meta()},
           admin_id: String.t() | nil,
