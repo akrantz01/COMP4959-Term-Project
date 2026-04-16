@@ -11,7 +11,9 @@ defmodule UnoWeb.DevtoolsLive do
      socket
      |> subscribe(params)
      |> reset_publish()
-     |> stream(:events, [], reset: true)}
+     |> stream(:events, [], reset: true)
+     |> assign(scenario_events: [], replay: nil, publish_tab: :event)
+     |> allow_upload(:scenario, accept: ~w(application/json), max_entries: 1)}
   end
 
   # --- Subscription events ---
@@ -19,7 +21,13 @@ defmodule UnoWeb.DevtoolsLive do
   def handle_event("subscribe-change", %{"subscription" => params}, socket),
     do: {:noreply, subscribe(socket, params)}
 
-  # --- Publish event selection ---
+  # --- Publish event navigation ---
+
+  def handle_event("publish-tab-change", %{"tab" => "event"}, socket),
+    do: {:noreply, assign(socket, :publish_tab, :event)}
+
+  def handle_event("publish-tab-change", %{"tab" => "scenario"}, socket),
+    do: {:noreply, assign(socket, :publish_tab, :scenario)}
 
   def handle_event("publish-select-event", %{"type" => type}, socket) do
     case Event.form(type) do
@@ -54,6 +62,9 @@ defmodule UnoWeb.DevtoolsLive do
      )}
   end
 
+  def handle_event("publish-submit", _, %{assigns: %{replay: %{}}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("publish-submit", unsigned_params, socket) do
     %{
       publish_event_type: type,
@@ -79,6 +90,71 @@ defmodule UnoWeb.DevtoolsLive do
     end
   end
 
+  # --- Scenario handling ---
+
+  def handle_event("scenario-change", _params, socket), do: {:noreply, socket}
+
+  def handle_event("scenario-run", _params, %{assigns: %{replay: %{}}} = socket),
+    do: {:noreply, socket}
+
+  def handle_event("scenario-run", _params, socket) do
+    result =
+      consume_uploaded_entries(socket, :scenario, fn %{path: path}, _entry ->
+        {:ok, File.read!(path)}
+      end)
+
+    case result do
+      [json] ->
+        with {:ok, decoded} <- Jason.decode(json),
+             {:ok, validated} <- validate_scenario(decoded, socket.assigns.subscription) do
+          send(self(), {:devtools_replay, validated})
+
+          {:noreply,
+           assign(socket,
+             replay: %{complete: 0, total: length(validated)},
+             publish_tab: :scenario
+           )}
+        else
+          {:error, reason} when is_exception(reason) ->
+            {:noreply,
+             put_flash(socket, :error, "Invalid scenario JSON: #{Exception.message(reason)}")}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Scenario error: #{reason}")}
+        end
+
+      [] ->
+        {:noreply, put_flash(socket, :error, "No file uploaded")}
+    end
+  end
+
+  def handle_event("scenario-download", _params, socket) do
+    events = Enum.reverse(socket.assigns.scenario_events)
+
+    scenario =
+      events
+      |> Enum.zip([nil | events])
+      |> Enum.map(fn {entry, prev} ->
+        type = Event.event_type(entry.event)
+        {:ok, mod} = Event.form(type)
+
+        delay_ms =
+          if prev,
+            do: max(DateTime.diff(entry.timestamp, prev.timestamp, :millisecond), 0),
+            else: 0
+
+        %{"event" => type, "delay_ms" => delay_ms, "params" => mod.from_event(entry.event)}
+      end)
+
+    filename = "scenario_#{DateTime.to_iso8601(DateTime.utc_now(), :basic)}.json"
+
+    {:noreply,
+     push_event(socket, "devtools:download", %{
+       filename: filename,
+       content: Jason.encode!(scenario, pretty: true)
+     })}
+  end
+
   # --- Pub/sub event receivers ---
 
   @event_sources %{
@@ -93,18 +169,40 @@ defmodule UnoWeb.DevtoolsLive do
   }
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@event_sources, mod) do
+    timestamp = DateTime.utc_now()
+
     {:noreply,
-     stream_insert(
-       socket,
+     socket
+     |> update(:scenario_events, &[%{event: msg, timestamp: timestamp} | &1])
+     |> stream_insert(
        :events,
        %{
          id: Nanoid.generate(),
          source: @event_sources[mod],
          content: inspect(msg, pretty: true, width: 0),
-         timestamp: DateTime.utc_now()
+         timestamp: timestamp
        },
        at: 0
      )}
+  end
+
+  def handle_info(
+        {:devtools_replay, [{_delay_ms, topic, event} | rest]},
+        %{assigns: %{replay: replay}} = socket
+      ) do
+    PubSub.broadcast(topic, event)
+
+    case rest do
+      [{next_delay_ms, _, _} | _] ->
+        Process.send_after(self(), {:devtools_replay, rest}, next_delay_ms)
+        {:noreply, assign(socket, :replay, Map.update!(replay, :complete, &(&1 + 1)))}
+
+      [] ->
+        {:noreply,
+         socket
+         |> assign(:replay, nil)
+         |> put_flash(:info, "Scenario complete!")}
+    end
   end
 
   # --- Private helpers ---
@@ -127,7 +225,8 @@ defmodule UnoWeb.DevtoolsLive do
         socket
         |> assign(
           subscription: data,
-          subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate})
+          subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate}),
+          scenario_events: []
         )
         |> reset_publish()
         |> stream(:events, [], reset: true)
@@ -151,6 +250,33 @@ defmodule UnoWeb.DevtoolsLive do
       publish_form_data: nil,
       publish_form: nil
     )
+  end
+
+  defp validate_scenario(entries, subscription) do
+    if(is_list(entries), do: entries, else: [entries])
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {entry, idx}, {:ok, acc} ->
+      validate_scenario_event(idx, entry, subscription, acc)
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
+  end
+
+  defp validate_scenario_event(idx, entry, subscription, acc) do
+    with %{"event" => type} <- entry,
+         delay_ms = if(idx == 0, do: 0, else: Map.get(entry, "delay_ms", 0)),
+         params = Map.get(entry, "params", %{}),
+         {:ok, mod} <- Event.form(type),
+         {:ok, validated} <-
+           mod.changeset(mod.new(), params) |> Ecto.Changeset.apply_action(:insert) do
+      topic = {Event.topic(type), subscription.id}
+
+      {:cont, {:ok, [{delay_ms, topic, mod.to_event(validated)} | acc]}}
+    else
+      _ -> {:halt, {:error, "invalid entry at index #{idx}"}}
+    end
   end
 
   defp event_name(key) when is_atom(key), do: event_name(Atom.to_string(key))

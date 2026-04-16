@@ -1,10 +1,10 @@
+<Layouts.flash_group flash={@flash} />
+
 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
   <header class="md:flex md:items-center md:justify-between py-4">
     <h2 class="text-2xl/7 font-bold sm:truncate sm:text-3xl sm:tracking-tight">
       DevTools
     </h2>
-
-    <.flash kind={:info} flash={@flash} />
   </header>
 
   <main class="space-y-8">
@@ -32,202 +32,265 @@
     </section>
 
     <section>
-      <.header>Publish Event</.header>
+      <.header>Publish</.header>
 
-      <div class="flex flex-row gap-x-4 mb-2">
-        <%= for {group, items} <- Event.events(@subscription) do %>
-          <div>
-            <h3 class="font-semibold mb-1.5">{group}</h3>
+      <div class="tabs tabs-border">
+        <%!-- Tab 1: Event --%>
+        <input
+          type="radio"
+          name="publish_tabs"
+          class="tab"
+          aria-label="Event"
+          checked={@publish_tab == :event}
+          disabled={@replay != nil}
+          phx-click="publish-tab-change"
+          phx-value-tab="event"
+        />
+        <div class="tab-content pt-4">
+          <div class="flex flex-row gap-x-4 mb-2">
+            <%= for {group, items} <- Event.events(@subscription) do %>
+              <div>
+                <h3 class="font-semibold mb-1.5">{group}</h3>
 
-            <div class="join">
-              <%= for {value, disabled} <- items do %>
-                <button
-                  class={["btn join-item", @publish_event_type == value && "btn-success"]}
-                  disabled={disabled}
-                  phx-click="publish-select-event"
-                  phx-value-type={value}
-                >
-                  {event_name(value)}
-                </button>
-              <% end %>
-            </div>
+                <div class="join">
+                  <%= for {value, disabled} <- items do %>
+                    <button
+                      class={["btn join-item", @publish_event_type == value && "btn-success"]}
+                      disabled={disabled or @replay != nil}
+                      phx-click="publish-select-event"
+                      phx-value-type={value}
+                    >
+                      {event_name(value)}
+                    </button>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
           </div>
-        <% end %>
-      </div>
 
-      <.form
-        :if={@publish_form}
-        for={@publish_form}
-        phx-change="publish-validate"
-        phx-submit="publish-submit"
-        class="space-y-2"
-      >
-        <%= case @publish_event_type do %>
-          <% "player_joined" -> %>
-            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
-            <.input field={@publish_form[:name]} type="text" label="Name" />
-          <% "player_left" -> %>
-            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
-          <% "game_started" -> %>
-            <.input field={@publish_form[:game_id]} type="text" label="Game ID" />
-          <% "game_ended" -> %>
-            <.input field={@publish_form[:winner_id]} type="text" label="Winner ID" />
-          <% "sync" -> %>
-            <div class="flex gap-4">
-              <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
-              <.input
-                field={@publish_form[:direction]}
-                type="select"
-                label="Direction"
-                options={[{"Left to right", :ltr}, {"Right to left", :rtl}]}
-              />
-              <.input
-                field={@publish_form[:vulnerable_player_id]}
-                type="text"
-                label="Vulnerable Player ID"
-              />
+          <.form
+            :if={@publish_form}
+            for={@publish_form}
+            phx-change="publish-validate"
+            phx-submit="publish-submit"
+            class="space-y-2"
+          >
+            <%= case @publish_event_type do %>
+              <% "player_joined" -> %>
+                <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+                <.input field={@publish_form[:name]} type="text" label="Name" />
+              <% "player_left" -> %>
+                <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+              <% "game_started" -> %>
+                <.input field={@publish_form[:game_id]} type="text" label="Game ID" />
+              <% "game_ended" -> %>
+                <.input field={@publish_form[:winner_id]} type="text" label="Winner ID" />
+              <% "sync" -> %>
+                <div class="flex gap-4">
+                  <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
+                  <.input
+                    field={@publish_form[:direction]}
+                    type="select"
+                    label="Direction"
+                    options={[{"Left to right", :ltr}, {"Right to left", :rtl}]}
+                  />
+                  <.input
+                    field={@publish_form[:vulnerable_player_id]}
+                    type="text"
+                    label="Vulnerable Player ID"
+                  />
+                </div>
+
+                <.top_card_fieldset form={@publish_form} />
+
+                <.chain_fieldset form={@publish_form} show={@publish_form_data.has_chain} />
+
+                <.embed_list
+                  form={@publish_form}
+                  field={:players}
+                  sort={:players_sort}
+                  drop={:players_drop}
+                  label="Players"
+                  add_label="Add player"
+                >
+                  <:item :let={player}>
+                    <.input field={player[:id]} type="text" label="ID" />
+                    <.input field={player[:name]} type="text" label="Name" />
+                  </:item>
+                </.embed_list>
+
+                <.embed_list
+                  form={@publish_form}
+                  field={:hands}
+                  sort={:hands_sort}
+                  drop={:hands_drop}
+                  label="Hands"
+                  add_label="Add hand"
+                >
+                  <:item :let={hand}>
+                    <fieldset class="w-full border p-4 rounded space-y-2">
+                      <.input field={hand[:player_id]} type="text" label="Player ID" />
+
+                      <.embed_list
+                        form={hand}
+                        field={:cards}
+                        sort={:cards_sort}
+                        drop={:cards_drop}
+                        label="Cards"
+                        add_label="Add card"
+                      >
+                        <:item :let={card_form}>
+                          <.card_inputs form={card_form} />
+                          <.input field={card_form[:count]} type="number" label="Count" />
+                        </:item>
+                      </.embed_list>
+                    </fieldset>
+                  </:item>
+                </.embed_list>
+              <% "next_turn" -> %>
+                <div class="flex gap-4 items-end">
+                  <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
+                  <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+                  <.input
+                    field={@publish_form[:direction]}
+                    type="select"
+                    label="Direction"
+                    options={[{"Left to right", :ltr}, {"Right to left", :rtl}]}
+                  />
+                  <.input
+                    field={@publish_form[:vulnerable_player_id]}
+                    type="text"
+                    label="Vulnerable Player ID"
+                  />
+                  <div class="mb-2">
+                    <.input
+                      field={@publish_form[:skipped]}
+                      type="checkbox"
+                      class="toggle"
+                      label="Skipped?"
+                    />
+                  </div>
+                </div>
+
+                <.top_card_fieldset form={@publish_form} />
+
+                <.chain_fieldset form={@publish_form} show={@publish_form_data.has_chain} />
+              <% "cards_played" -> %>
+                <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+
+                <.embed_list
+                  form={@publish_form}
+                  field={:played_cards}
+                  sort={:played_cards_sort}
+                  drop={:played_cards_drop}
+                  label="Played Cards"
+                  add_label="Add card"
+                >
+                  <:item :let={pc}>
+                    <.card_inputs form={pc} />
+                  </:item>
+                </.embed_list>
+
+                <.embed_list
+                  form={@publish_form}
+                  field={:hand}
+                  sort={:hand_sort}
+                  drop={:hand_drop}
+                  label="Hand"
+                  add_label="Add card"
+                >
+                  <:item :let={f}>
+                    <.card_inputs form={f} />
+                    <.input field={f[:count]} type="number" label="Count" />
+                  </:item>
+                </.embed_list>
+              <% "cards_drawn" -> %>
+                <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
+
+                <.embed_list
+                  form={@publish_form}
+                  field={:drawn_cards}
+                  sort={:drawn_cards_sort}
+                  drop={:drawn_cards_drop}
+                  label="Drawn Cards"
+                  add_label="Add card"
+                >
+                  <:item :let={dc}>
+                    <.card_inputs form={dc} />
+                  </:item>
+                </.embed_list>
+
+                <.embed_list
+                  form={@publish_form}
+                  field={:hand}
+                  sort={:hand_sort}
+                  drop={:hand_drop}
+                  label="Hand"
+                  add_label="Add card"
+                >
+                  <:item :let={f}>
+                    <.card_inputs form={f} />
+                    <.input field={f[:count]} type="number" label="Count" />
+                  </:item>
+                </.embed_list>
+            <% end %>
+
+            <.button variant="primary" type="submit" disabled={@replay != nil}>Publish</.button>
+          </.form>
+        </div>
+
+        <%!-- Tab 2: Scenario --%>
+        <input
+          type="radio"
+          name="publish_tabs"
+          class="tab"
+          aria-label="Scenario"
+          checked={@publish_tab == :scenario}
+          phx-click="publish-tab-change"
+          phx-value-tab="scenario"
+        />
+        <div class="tab-content pt-4">
+          <form phx-submit="scenario-run" phx-change="scenario-change">
+            <div class="flex items-center gap-4">
+              <.live_file_input class="file-input" upload={@uploads.scenario} />
+              <.button type="submit" disabled={@replay != nil}>
+                Run
+              </.button>
             </div>
 
-            <.top_card_fieldset form={@publish_form} />
-
-            <.chain_fieldset form={@publish_form} show={@publish_form_data.has_chain} />
-
-            <.embed_list
-              form={@publish_form}
-              field={:players}
-              sort={:players_sort}
-              drop={:players_drop}
-              label="Players"
-              add_label="Add player"
+            <div
+              :if={@replay != nil}
+              class="my-4 w-64 h-2 bg-base-300 rounded-full overflow-hidden"
             >
-              <:item :let={player}>
-                <.input field={player[:id]} type="text" label="ID" />
-                <.input field={player[:name]} type="text" label="Name" />
-              </:item>
-            </.embed_list>
-
-            <.embed_list
-              form={@publish_form}
-              field={:hands}
-              sort={:hands_sort}
-              drop={:hands_drop}
-              label="Hands"
-              add_label="Add hand"
-            >
-              <:item :let={hand}>
-                <fieldset class="w-full border p-4 rounded space-y-2">
-                  <.input field={hand[:player_id]} type="text" label="Player ID" />
-
-                  <.embed_list
-                    form={hand}
-                    field={:cards}
-                    sort={:cards_sort}
-                    drop={:cards_drop}
-                    label="Cards"
-                    add_label="Add card"
-                  >
-                    <:item :let={card_form}>
-                      <.card_inputs form={card_form} />
-                      <.input field={card_form[:count]} type="number" label="Count" />
-                    </:item>
-                  </.embed_list>
-                </fieldset>
-              </:item>
-            </.embed_list>
-          <% "next_turn" -> %>
-            <div class="flex gap-4 items-end">
-              <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
-              <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
-              <.input
-                field={@publish_form[:direction]}
-                type="select"
-                label="Direction"
-                options={[{"Left to right", :ltr}, {"Right to left", :rtl}]}
-              />
-              <.input
-                field={@publish_form[:vulnerable_player_id]}
-                type="text"
-                label="Vulnerable Player ID"
-              />
-              <div class="mb-2">
-                <.input
-                  field={@publish_form[:skipped]}
-                  type="checkbox"
-                  class="toggle"
-                  label="Skipped?"
-                />
+              <div
+                class="h-full bg-primary transition-[width] duration-300 ease-out rounded-full"
+                style={"width: #{@replay.complete / @replay.total * 100}%"}
+              >
               </div>
             </div>
 
-            <.top_card_fieldset form={@publish_form} />
-
-            <.chain_fieldset form={@publish_form} show={@publish_form_data.has_chain} />
-          <% "cards_played" -> %>
-            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
-
-            <.embed_list
-              form={@publish_form}
-              field={:played_cards}
-              sort={:played_cards_sort}
-              drop={:played_cards_drop}
-              label="Played Cards"
-              add_label="Add card"
-            >
-              <:item :let={pc}>
-                <.card_inputs form={pc} />
-              </:item>
-            </.embed_list>
-
-            <.embed_list
-              form={@publish_form}
-              field={:hand}
-              sort={:hand_sort}
-              drop={:hand_drop}
-              label="Hand"
-              add_label="Add card"
-            >
-              <:item :let={f}>
-                <.card_inputs form={f} />
-                <.input field={f[:count]} type="number" label="Count" />
-              </:item>
-            </.embed_list>
-          <% "cards_drawn" -> %>
-            <.input field={@publish_form[:player_id]} type="text" label="Player ID" />
-
-            <.embed_list
-              form={@publish_form}
-              field={:drawn_cards}
-              sort={:drawn_cards_sort}
-              drop={:drawn_cards_drop}
-              label="Drawn Cards"
-              add_label="Add card"
-            >
-              <:item :let={dc}>
-                <.card_inputs form={dc} />
-              </:item>
-            </.embed_list>
-
-            <.embed_list
-              form={@publish_form}
-              field={:hand}
-              sort={:hand_sort}
-              drop={:hand_drop}
-              label="Hand"
-              add_label="Add card"
-            >
-              <:item :let={f}>
-                <.card_inputs form={f} />
-                <.input field={f[:count]} type="number" label="Count" />
-              </:item>
-            </.embed_list>
-        <% end %>
-
-        <.button variant="primary" type="submit">Publish</.button>
-      </.form>
+            <%= for entry <- @uploads.scenario.entries do %>
+              <%= for err <- upload_errors(@uploads.scenario, entry) do %>
+                <p class="text-error text-sm mt-1">{Phoenix.Naming.humanize(err)}</p>
+              <% end %>
+            <% end %>
+          </form>
+        </div>
+      </div>
     </section>
 
-    <section>
-      <.header>Events</.header>
+    <section id="events-section" phx-hook=".ScenarioDownload">
+      <.header>
+        Events
+        <:actions>
+          <.button
+            phx-click="scenario-download"
+            disabled={@scenario_events == []}
+          >
+            Download Scenario
+          </.button>
+        </:actions>
+      </.header>
 
       <.table id="events" rows={@streams.events} row_id={fn {dom_id, _} -> dom_id end}>
         <:col :let={{_, event}} label="Source">{event.source}</:col>
@@ -239,3 +302,19 @@
     </section>
   </main>
 </div>
+
+<script :type={Phoenix.LiveView.ColocatedHook} name=".ScenarioDownload">
+  export default {
+    mounted() {
+      this.handleEvent("devtools:download", ({filename, content}) => {
+        const blob = new Blob([content], { type: "application/json" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(url)
+      })
+    }
+  }
+</script>

@@ -56,4 +56,30 @@ defmodule UnoWeb.Forms.Event.Sync do
         end)
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.Sync{} = e) do
+    params = %{
+      "sequence" => e.sequence,
+      "direction" => to_string(e.direction),
+      "vulnerable_player_id" => e.vulnerable_player_id,
+      "top_card" => Card.unformat(:played, e.top_card),
+      "players" => Enum.map(e.players, fn {id, name} -> %{"id" => id, "name" => name} end),
+      "hands" =>
+        Enum.map(e.hands, fn {player_id, cards} ->
+          %{
+            "player_id" => player_id,
+            "cards" =>
+              Enum.map(cards, fn {card, count} ->
+                Card.unformat(:hand, card) |> Map.put("count", count)
+              end)
+          }
+        end)
+    }
+
+    case e.chain do
+      nil -> Map.put(params, "has_chain", false)
+      chain -> params |> Map.put("has_chain", true) |> Map.put("chain", Chain.unformat(chain))
+    end
+  end
 end

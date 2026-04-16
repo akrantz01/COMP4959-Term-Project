@@ -56,4 +56,21 @@ defmodule UnoWeb.Forms.Event.NextTurn do
       chain: Chain.format(form.chain)
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.NextTurn{} = e) do
+    params = %{
+      "sequence" => e.sequence,
+      "player_id" => e.player_id,
+      "direction" => to_string(e.direction),
+      "vulnerable_player_id" => e.vulnerable_player_id,
+      "skipped" => e.skipped,
+      "top_card" => Card.unformat(:played, e.top_card)
+    }
+
+    case e.chain do
+      nil -> Map.put(params, "has_chain", false)
+      chain -> params |> Map.put("has_chain", true) |> Map.put("chain", Chain.unformat(chain))
+    end
+  end
 end

@@ -12,6 +12,19 @@ defmodule UnoWeb.DevtoolsLiveHelpers do
     live(conn, "/dev/tools")
   end
 
+  def upload_scenario(view, json) do
+    upload =
+      file_input(view, "form[phx-submit='scenario-run']", :scenario, [
+        %{name: "scenario.json", content: json, type: "application/json"}
+      ])
+
+    render_upload(upload, "scenario.json")
+
+    view
+    |> element("form[phx-submit='scenario-run']")
+    |> render_submit()
+  end
+
   def change_subscription(view, attrs) do
     view
     |> form(
