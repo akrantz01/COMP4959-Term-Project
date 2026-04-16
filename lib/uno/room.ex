@@ -2,30 +2,49 @@ defmodule Uno.Room do
   @moduledoc """
   Exposes an 'Uno.Room' for clients to connect with.
 
-  Handles room creation, player joining/leaving, and game initiation.
+  Handles room creation, player membership, game lifecycle, and room statistics.
 
   The room state includes:
   - `room_id`: Unique identifier for the room.
-  - `players`: List of player IDs currently in the room.
-  - `admin_id`: Player ID of the room admin (first to join).
-  - `is_started`: Boolean indicating if the game has started.
+  - `state`: `:lobby` or `:in_game`.
+  - `players`: Map of player IDs to player metadata.
+  - `admin_id`: Player ID of the current room admin.
+  - `last_winner_id`: Player ID of the last winning player.
+  - `games_played`: Number of completed games in this room.
   """
 
   use GenServer
 
   alias Uno.Events, as: Events
 
+  @type room_state :: :lobby | :in_game
+
+  @type player_meta :: %{
+          name: String.t(),
+          connected: boolean(),
+          wins: non_neg_integer()
+        }
+
   @enforce_keys [:room_id]
-  defstruct [:room_id, players: [], admin_id: nil, is_started: false]
+  defstruct [
+    :room_id,
+    state: :lobby,
+    players: %{},
+    admin_id: nil,
+    last_winner_id: nil,
+    games_played: 0
+  ]
 
   @typedoc """
   The type definition for the Uno.Room struct.
   """
   @type t :: %__MODULE__{
-          room_id: Events.room_id(),
-          players: list(Events.player_id()),
-          admin_id: Events.player_id() | nil,
-          is_started: boolean()
+          room_id: String.t(),
+          state: room_state(),
+          players: %{String.t() => player_meta()},
+          admin_id: String.t() | nil,
+          last_winner_id: String.t() | nil,
+          games_played: non_neg_integer()
         }
 
   @typep state :: t()
