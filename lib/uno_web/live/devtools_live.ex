@@ -12,7 +12,8 @@ defmodule UnoWeb.DevtoolsLive do
      |> subscribe(params)
      |> reset_publish()
      |> stream(:events, [], reset: true)
-     |> assign(scenario_events: [], publish_tab: :event)}
+     |> assign(scenario_events: [], replaying: false, publish_tab: :event)
+     |> allow_upload(:scenario, accept: ~w(application/json), max_entries: 1)}
   end
 
   # --- Subscription events ---
@@ -61,6 +62,9 @@ defmodule UnoWeb.DevtoolsLive do
      )}
   end
 
+  def handle_event("publish-submit", _, %{assigns: %{replaying: true}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("publish-submit", unsigned_params, socket) do
     %{
       publish_event_type: type,
@@ -103,7 +107,7 @@ defmodule UnoWeb.DevtoolsLive do
       [json] ->
         with {:ok, decoded} <- Jason.decode(json),
              {:ok, validated} <- validate_scenario(decoded, socket.assigns.subscription) do
-          IO.inspect(validated) # TODO: replay all events in sequence
+          send(self(), {:devtools_replay, validated})
           {:noreply, assign(socket, replaying: true, publish_tab: :scenario)}
         else
           {:error, reason} when is_exception(reason) ->
@@ -148,6 +152,22 @@ defmodule UnoWeb.DevtoolsLive do
        },
        at: 0
      )}
+  end
+
+  def handle_info({:devtools_replay, [{_delay_ms, topic, event} | rest]}, socket) do
+    PubSub.broadcast(topic, event)
+
+    case rest do
+      [{next_delay_ms, _, _} | _] ->
+        Process.send_after(self(), {:devtools_replay, rest}, next_delay_ms)
+        {:noreply, socket}
+
+      [] ->
+        {:noreply,
+         socket
+         |> assign(replaying: false)
+         |> put_flash(:info, "Scenario complete!")}
+    end
   end
 
   # --- Private helpers ---
