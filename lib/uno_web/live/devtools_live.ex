@@ -11,7 +11,8 @@ defmodule UnoWeb.DevtoolsLive do
      socket
      |> subscribe(params)
      |> reset_publish()
-     |> stream(:events, [], reset: true)}
+     |> stream(:events, [], reset: true)
+     |> assign(publish_tab: :event)}
   end
 
   # --- Subscription events ---
@@ -19,7 +20,13 @@ defmodule UnoWeb.DevtoolsLive do
   def handle_event("subscribe-change", %{"subscription" => params}, socket),
     do: {:noreply, subscribe(socket, params)}
 
-  # --- Publish event selection ---
+  # --- Publish event navigation ---
+
+  def handle_event("publish-tab-change", %{"tab" => "event"}, socket),
+    do: {:noreply, assign(socket, :publish_tab, :event)}
+
+  def handle_event("publish-tab-change", %{"tab" => "scenario"}, socket),
+    do: {:noreply, assign(socket, :publish_tab, :scenario)}
 
   def handle_event("publish-select-event", %{"type" => type}, socket) do
     case Event.form(type) do
