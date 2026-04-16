@@ -56,6 +56,27 @@ defmodule UnoWeb.CardComponents do
     lg: ["w-40 h-60"]
   }
 
+  @stack_rotations ["rotate-0", "rotate-4", "-rotate-10", "-rotate-8", "rotate-14"]
+
+  attr :class, :string, default: nil
+  attr :rest, :global
+  slot :card, required: true
+
+  def card_stack(assigns) do
+    assigns = assign(assigns, cards: Enum.zip(assigns.card, Stream.cycle(@stack_rotations)))
+
+    ~H"""
+    <div class={["grid place-items-center", @class]} {@rest}>
+      <div
+        :for={{card, rotation} <- Enum.reverse(@cards)}
+        class={["[grid-area:1/1]", rotation]}
+      >
+        {render_slot(card)}
+      </div>
+    </div>
+    """
+  end
+
   attr :size, :atom, values: ~w(md lg)a, default: :md
   attr :class, :string, default: nil
   attr :rest, :global

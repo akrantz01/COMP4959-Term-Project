@@ -36,7 +36,11 @@
     </div>
 
     <div>
-      <.flipped_card size={:lg} />
+      <.card_stack>
+        <:card><.flipped_card size={:lg} /></:card>
+        <:card><.flipped_card size={:lg} /></:card>
+        <:card><.flipped_card size={:lg} /></:card>
+      </.card_stack>
     </div>
   </section>
 
