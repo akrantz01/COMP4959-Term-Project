@@ -56,12 +56,14 @@
     phx-hook=".HandScroll"
     class="max-w-full min-h-54 overflow-x-auto"
   >
+    <% my_turn = @player_id == @turn_player_id %>
     <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
       <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
         <div>
           <% {card_colour, card_type} = card_parts(card) %>
           <.uno_card
             card={card}
+            disabled={!my_turn}
             phx-click="toggle-card"
             phx-target={@myself}
             phx-value-colour={card_colour}
