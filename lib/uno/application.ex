@@ -12,6 +12,8 @@ defmodule Uno.Application do
       Uno.Repo,
       {DNSCluster, query: Application.get_env(:uno, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Uno.PubSub},
+      {Registry, keys: :unique, name: Uno.RoomRegistry},
+      Uno.RoomSupervisor,
       # Start a worker by calling: Uno.Worker.start_link(arg)
       # {Uno.Worker, arg},
       # Start to serve requests, typically the last entry
