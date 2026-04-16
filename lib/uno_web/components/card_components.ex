@@ -105,6 +105,7 @@ defmodule UnoWeb.CardComponents do
   end
 
   attr :card, :any, required: true
+  attr :selectable, :boolean, default: true
   attr :size, :atom, values: ~w(md lg)a, default: :md
   attr :class, :string, default: nil
   attr :rest, :global
@@ -128,11 +129,11 @@ defmodule UnoWeb.CardComponents do
     <div
       class={[
         @size,
-        "rounded-2xl relative cursor-pointer select-none",
+        "rounded-2xl relative select-none",
         "transition-all duration-200 ease-out",
         "shadow-[0_2px_4px_rgba(0,0,0,0.3),0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
-        "hover:-translate-y-2 hover:scale-103",
-        "hover:shadow-[0_12px_28px_rgba(0,0,0,0.35),0_4px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
+        @selectable &&
+          "cursor-pointer hover:-translate-y-2 hover:scale-103 hover:shadow-[0_12px_28px_rgba(0,0,0,0.35),0_4px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
         if(@wild?, do: "bg-[#1a1a1a]", else: @c.bg),
         @played? && @c.glow,
         @played? && ["border-4", @c.border],
