@@ -88,7 +88,7 @@ defmodule Uno.Events do
     Synchronize the current game state with all the clients.
     """
 
-    @enforce_keys [:sequence, :top_card, :direction, :hands, :players]
+    @enforce_keys [:sequence, :current_player_id, :top_card, :direction, :hands, :players]
     defstruct [
       :sequence,
       :current_player_id,
