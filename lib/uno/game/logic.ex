@@ -150,6 +150,75 @@ defmodule Uno.Game.Logic do
     end)
   end
 
+  #GL-7
+  @spec play_cards(t(), player_id(), played_card()) :: {:ok, t()} | {:error, :not_your_turn | :card_not_in_hand | :card_not_playable}
+  def play_cards(game, player_id, played_card) do
+    with :ok <- check_turn(game, player_id),
+         :ok <- check_in_hand(game, player_id, played_card),
+         :ok <- check_playable(played_card, game.top_card) do
+      game =
+        game
+        |> remove_from_hand(player_id, played_card)
+        |> Map.put(:top_card, played_card)
+        |> Map.put(:sequence, game.sequence + 1)
+        |> advance_turn()
+
+      {:ok, game}
+    end
+  end
+
+  @spec check_turn(t(), player_id()) :: :ok | {:error, :not_your_turn}
+  defp check_turn(game, player_id) do
+    if current_turn(game) == player_id, do: :ok, else: {:error, :not_your_turn}
+  end
+
+  @spec check_in_hand(t(), player_id(), played_card()) :: :ok | {:error, :card_not_in_hand}
+  defp check_in_hand(%__MODULE__{hands: hands}, player_id, played_card) do
+    hand_card = to_hand_card(played_card)
+    in_hand? = hands |> Map.get(player_id, []) |> Enum.member?(hand_card)
+    if in_hand?, do: :ok, else: {:error, :card_not_in_hand}
+  end
+
+  @spec check_playable(played_card(), played_card() | nil) :: :ok | {:error, :card_not_playable}
+  defp check_playable(played_card, top_card) do
+    hand_card = to_hand_card(played_card)
+    if playable_card?(hand_card, top_card), do: :ok, else: {:error, :card_not_playable}
+  end
+
+
+# Converts a played_card() back to a hand_card() for hand lookup and playability checks.
+# e.g. {:wild, :red} -> :wild | {:red, 5} -> {:red, 5}
+  @spec to_hand_card(played_card()) :: hand_card()
+  defp to_hand_card({wild, _colour}) when wild in [:wild, :wild_draw_4], do: wild
+  defp to_hand_card(card), do: card
+
+  @spec remove_from_hand(t(), player_id(), played_card()) :: t()
+  defp remove_from_hand(game, player_id, played_card) do
+    hand_card = to_hand_card(played_card)
+
+    updated_hand =
+      game.hands
+      |> Map.get(player_id, [])
+      |> List.delete(hand_card)
+
+    %{game | hands: Map.put(game.hands, player_id, updated_hand)}
+  end
+
+  @spec advance_turn(t()) :: t()
+  defp advance_turn(%__MODULE__{players: players, direction: direction} = game) do
+    {{:value, current}, rest} = :queue.out(players)
+
+    new_players =
+      case direction do
+        :ltr -> :queue.in(current, rest)
+        :rtl -> :queue.in_r(current, rest)
+      end
+
+    %{game | players: new_players}
+  end
+
+
+
   # GL-8 (Helper function to flip direction)
   @spec apply_reverse(direction(), [played_card()]) :: {direction(), boolean()}
   def apply_reverse(direction, played_cards) do
