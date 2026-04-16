@@ -268,8 +268,18 @@
       </div>
     </section>
 
-    <section>
-      <.header>Events</.header>
+    <section id="events-section" phx-hook=".ScenarioDownload">
+      <.header>
+        Events
+        <:actions>
+          <.button
+            phx-click="scenario-download"
+            disabled={@scenario_events == []}
+          >
+            Download Scenario
+          </.button>
+        </:actions>
+      </.header>
 
       <.table id="events" rows={@streams.events} row_id={fn {dom_id, _} -> dom_id end}>
         <:col :let={{_, event}} label="Source">{event.source}</:col>
@@ -281,3 +291,19 @@
     </section>
   </main>
 </div>
+
+<script :type={Phoenix.LiveView.ColocatedHook} name=".ScenarioDownload">
+  export default {
+    mounted() {
+      this.handleEvent("devtools:download", ({filename, content}) => {
+        const blob = new Blob([content], { type: "application/json" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        a.click()
+        URL.revokeObjectURL(url)
+      })
+    }
+  }
+</script>

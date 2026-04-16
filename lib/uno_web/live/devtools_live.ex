@@ -123,6 +123,33 @@ defmodule UnoWeb.DevtoolsLive do
     end
   end
 
+  def handle_event("scenario-download", _params, socket) do
+    events = Enum.reverse(socket.assigns.scenario_events)
+
+    scenario =
+      events
+      |> Enum.zip([nil | events])
+      |> Enum.map(fn {entry, prev} ->
+        type = Event.event_type(entry.event)
+        {:ok, mod} = Event.form(type)
+
+        delay_ms =
+          if prev,
+            do: max(DateTime.diff(entry.timestamp, prev.timestamp, :millisecond), 0),
+            else: 0
+
+        %{"event" => type, "delay_ms" => delay_ms, "params" => mod.from_event(entry.event)}
+      end)
+
+    filename = "scenario_#{DateTime.to_iso8601(DateTime.utc_now(), :basic)}.json"
+
+    {:noreply,
+     push_event(socket, "devtools:download", %{
+       filename: filename,
+       content: Jason.encode!(scenario, pretty: true)
+     })}
+  end
+
   # --- Pub/sub event receivers ---
 
   @event_sources %{
