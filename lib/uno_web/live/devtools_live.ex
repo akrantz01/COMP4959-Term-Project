@@ -12,7 +12,7 @@ defmodule UnoWeb.DevtoolsLive do
      |> subscribe(params)
      |> reset_publish()
      |> stream(:events, [], reset: true)
-     |> assign(publish_tab: :event)}
+     |> assign(scenario_events: [], publish_tab: :event)}
   end
 
   # --- Subscription events ---
@@ -133,15 +133,18 @@ defmodule UnoWeb.DevtoolsLive do
   }
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@event_sources, mod) do
+    timestamp = DateTime.utc_now()
+
     {:noreply,
-     stream_insert(
-       socket,
+     socket
+     |> update(:scenario_events, &[%{event: msg, timestamp: timestamp} | &1])
+     |> stream_insert(
        :events,
        %{
          id: Nanoid.generate(),
          source: @event_sources[mod],
          content: inspect(msg, pretty: true, width: 0),
-         timestamp: DateTime.utc_now()
+         timestamp: timestamp
        },
        at: 0
      )}
@@ -167,7 +170,8 @@ defmodule UnoWeb.DevtoolsLive do
         socket
         |> assign(
           subscription: data,
-          subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate})
+          subscribe_form: SubscriptionForm.to_form(%{changeset | action: :validate}),
+          scenario_events: []
         )
         |> reset_publish()
         |> stream(:events, [], reset: true)
