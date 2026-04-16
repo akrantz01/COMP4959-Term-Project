@@ -42,7 +42,7 @@
           class="tab"
           aria-label="Event"
           checked={@publish_tab == :event}
-          disabled={@replaying}
+          disabled={@replay != nil}
           phx-click="publish-tab-change"
           phx-value-tab="event"
         />
@@ -56,7 +56,7 @@
                   <%= for {value, disabled} <- items do %>
                     <button
                       class={["btn join-item", @publish_event_type == value && "btn-success"]}
-                      disabled={disabled or @replaying}
+                      disabled={disabled or @replay != nil}
                       phx-click="publish-select-event"
                       phx-value-type={value}
                     >
@@ -235,7 +235,7 @@
                 </.embed_list>
             <% end %>
 
-            <.button variant="primary" type="submit" disabled={@replaying}>Publish</.button>
+            <.button variant="primary" type="submit" disabled={@replay != nil}>Publish</.button>
           </.form>
         </div>
 
@@ -253,9 +253,20 @@
           <form phx-submit="scenario-run" phx-change="scenario-change">
             <div class="flex items-center gap-4">
               <.live_file_input class="file-input" upload={@uploads.scenario} />
-              <.button type="submit" disabled={@replaying}>
+              <.button type="submit" disabled={@replay != nil}>
                 Run
               </.button>
+            </div>
+
+            <div
+              :if={@replay != nil}
+              class="w-64 h-2 bg-base-300 rounded-full overflow-hidden"
+            >
+              <div
+                class="h-full bg-primary transition-[width] duration-300 ease-out rounded-full"
+                style={"width: #{@replay.complete / @replay.total * 100}%"}
+              >
+              </div>
             </div>
 
             <%= for entry <- @uploads.scenario.entries do %>

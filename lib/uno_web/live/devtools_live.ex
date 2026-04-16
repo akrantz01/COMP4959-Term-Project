@@ -12,7 +12,7 @@ defmodule UnoWeb.DevtoolsLive do
      |> subscribe(params)
      |> reset_publish()
      |> stream(:events, [], reset: true)
-     |> assign(scenario_events: [], replaying: false, publish_tab: :event)
+     |> assign(scenario_events: [], replay: nil, publish_tab: :event)
      |> allow_upload(:scenario, accept: ~w(application/json), max_entries: 1)}
   end
 
@@ -62,7 +62,7 @@ defmodule UnoWeb.DevtoolsLive do
      )}
   end
 
-  def handle_event("publish-submit", _, %{assigns: %{replaying: true}} = socket),
+  def handle_event("publish-submit", _, %{assigns: %{replay: %{}}} = socket),
     do: {:noreply, socket}
 
   def handle_event("publish-submit", unsigned_params, socket) do
@@ -94,7 +94,7 @@ defmodule UnoWeb.DevtoolsLive do
 
   def handle_event("scenario-change", _params, socket), do: {:noreply, socket}
 
-  def handle_event("scenario-run", _params, %{assigns: %{replaying: true}} = socket),
+  def handle_event("scenario-run", _params, %{assigns: %{replay: %{}}} = socket),
     do: {:noreply, socket}
 
   def handle_event("scenario-run", _params, socket) do
@@ -108,7 +108,12 @@ defmodule UnoWeb.DevtoolsLive do
         with {:ok, decoded} <- Jason.decode(json),
              {:ok, validated} <- validate_scenario(decoded, socket.assigns.subscription) do
           send(self(), {:devtools_replay, validated})
-          {:noreply, assign(socket, replaying: true, publish_tab: :scenario)}
+
+          {:noreply,
+           assign(socket,
+             replay: %{complete: 0, total: length(validated)},
+             publish_tab: :scenario
+           )}
         else
           {:error, reason} when is_exception(reason) ->
             {:noreply,
@@ -181,18 +186,21 @@ defmodule UnoWeb.DevtoolsLive do
      )}
   end
 
-  def handle_info({:devtools_replay, [{_delay_ms, topic, event} | rest]}, socket) do
+  def handle_info(
+        {:devtools_replay, [{_delay_ms, topic, event} | rest]},
+        %{assigns: %{replay: replay}} = socket
+      ) do
     PubSub.broadcast(topic, event)
 
     case rest do
       [{next_delay_ms, _, _} | _] ->
         Process.send_after(self(), {:devtools_replay, rest}, next_delay_ms)
-        {:noreply, socket}
+        {:noreply, assign(socket, :replay, Map.update!(replay, :complete, &(&1 + 1)))}
 
       [] ->
         {:noreply,
          socket
-         |> assign(replaying: false)
+         |> assign(:replay, nil)
          |> put_flash(:info, "Scenario complete!")}
     end
   end
