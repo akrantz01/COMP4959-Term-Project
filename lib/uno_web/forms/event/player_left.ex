@@ -29,4 +29,8 @@ defmodule UnoWeb.Forms.Event.PlayerLeft do
       player_id: form.player_id
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.PlayerLeft{} = e),
+    do: %{"player_id" => e.player_id}
 end

@@ -43,6 +43,18 @@ defmodule UnoWeb.Forms.Card do
 
   def format(:played, %__MODULE__{type: type, colour: colour}), do: {colour, type}
 
+  def unformat(:hand, type) when is_atom(type),
+    do: %{"type" => to_string(type)}
+
+  def unformat(:hand, {colour, type}),
+    do: %{"type" => to_string(type), "colour" => to_string(colour)}
+
+  def unformat(:played, {type, colour}) when type in ~w(wild wild_draw_4)a,
+    do: %{"type" => to_string(type), "colour" => to_string(colour)}
+
+  def unformat(:played, {colour, type}),
+    do: %{"type" => to_string(type), "colour" => to_string(colour)}
+
   defp validate_wildcard(changeset) do
     is_wild = get_field(changeset, :type) in ~w(wild wild_draw_4)a
     missing_colour = is_nil(get_field(changeset, :colour))

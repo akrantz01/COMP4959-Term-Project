@@ -29,4 +29,8 @@ defmodule UnoWeb.Forms.Event.GameEnded do
       winner_id: form.winner_id
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.GameEnded{} = e),
+    do: %{"winner_id" => e.winner_id}
 end

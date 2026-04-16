@@ -45,4 +45,16 @@ defmodule UnoWeb.Forms.Event.CardsPlayed do
       hand: Map.new(form.hand, &{Card.format(:hand, &1), &1.count})
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.CardsPlayed{} = e) do
+    %{
+      "player_id" => e.player_id,
+      "played_cards" => Enum.map(e.played_cards, &Card.unformat(:played, &1)),
+      "hand" =>
+        Enum.map(e.hand, fn {card, count} ->
+          Card.unformat(:hand, card) |> Map.put("count", count)
+        end)
+    }
+  end
 end

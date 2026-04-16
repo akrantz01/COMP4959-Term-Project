@@ -32,4 +32,8 @@ defmodule UnoWeb.Forms.Event.PlayerJoined do
       name: form.name
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.PlayerJoined{} = e),
+    do: %{"player_id" => e.player_id, "name" => e.name}
 end

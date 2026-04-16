@@ -18,6 +18,12 @@ defmodule UnoWeb.Forms.Event do
   """
   @callback to_event(form :: term()) :: struct()
 
+  @doc """
+  Converts a domain event struct back into a params map compatible with changeset/2.
+  Used for serializing received PubSub events as scenario JSON.
+  """
+  @callback from_event(event :: struct()) :: map()
+
   @forms %{
     "player_joined" => __MODULE__.PlayerJoined,
     "player_left" => __MODULE__.PlayerLeft,
@@ -30,6 +36,20 @@ defmodule UnoWeb.Forms.Event do
   }
 
   def form(event), do: Map.fetch(@forms, event)
+
+  @event_to_type %{
+    Uno.Events.PlayerJoined => "player_joined",
+    Uno.Events.PlayerLeft => "player_left",
+    Uno.Events.GameStarted => "game_started",
+    Uno.Events.GameEnded => "game_ended",
+    Uno.Events.Sync => "sync",
+    Uno.Events.NextTurn => "next_turn",
+    Uno.Events.CardsPlayed => "cards_played",
+    Uno.Events.CardsDrawn => "cards_drawn"
+  }
+
+  def event_type(%mod{}) when is_map_key(@event_to_type, mod),
+    do: Map.fetch!(@event_to_type, mod)
 
   @room_events [
     "player_joined",
