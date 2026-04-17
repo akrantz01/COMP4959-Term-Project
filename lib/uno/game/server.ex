@@ -12,6 +12,7 @@ defmodule Uno.Game.Server do
   alias Uno.Game.Logic
 
   @broadcast_delay 200
+  @disconnect_timeout 60_000
 
   @doc """
   Starts the GenServer with the given room ID and player list.
@@ -112,9 +113,14 @@ defmodule Uno.Game.Server do
     {:noreply, new_state}
   end
 
+  # GS-13: Add to auto-play set and schedule auto-turn after 60s.
+  # The auto_play_set acts as the stale-timer guard: if the player reconnects
+  # before the timer fires, GS-12 removes them from the set and handle_auto_play is a no-op.
   @impl true
-  def handle_cast({:disconnect, _player_id}, state) do
-    {:noreply, state}
+  def handle_cast({:disconnect, player_id}, state) do
+    new_state = %{state | auto_play_set: MapSet.put(state.auto_play_set, player_id)}
+    Process.send_after(self(), {:auto_play, player_id}, @disconnect_timeout)
+    {:noreply, new_state}
   end
 
   # GS-3/GS-4: Applies the full card list via Logic, broadcasts results.
