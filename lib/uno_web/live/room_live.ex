@@ -8,14 +8,23 @@ defmodule UnoWeb.RoomLive do
 
     if connected?(socket) do
       Uno.PubSub.subscribe({:room, room_id})
+      Uno.PubSub.subscribe({:game, room_id})
     end
 
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        room_id: room_id,
        player_id: player_id,
        players: [],
        status: :waiting
+     )
+     |> assign(
+       :room_form,
+       RoomForm.new(%{
+         player_id: player_id,
+         state: :lobby
+       })
      )}
   end
 
@@ -35,22 +44,9 @@ defmodule UnoWeb.RoomLive do
 
   def handle_info({:game_ended, _}, socket) do
     {:noreply, assign(socket, status: :ended)}
-  alias Uno.{Events, PubSub}
-  alias UnoWeb.Forms.RoomForm
-  alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
-
-  def mount(%{"id" => id}, _session, socket) do
-    # TODO: remove once room and game exist
-    PubSub.subscribe({:room, id})
-    PubSub.subscribe({:game, id})
-
-    # TODO: retrieve from session
-    player_id = Nanoid.generate()
-
-    {:ok,
-     socket
-     |> assign(room_id: id, player_id: player_id, state: :lobby)
-     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
+    alias Uno.{Events, PubSub}
+    alias UnoWeb.Forms.RoomForm
+    alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
   end
 
   # --- Temporary, remove once more is implemented ---
