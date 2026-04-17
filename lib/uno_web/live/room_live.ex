@@ -19,7 +19,6 @@ defmodule UnoWeb.RoomLive do
      )}
   end
 
-
   ## HANDLE PUBSUB EVENTS
 
   def handle_info({:player_joined, player_id}, socket) do
@@ -37,7 +36,4 @@ defmodule UnoWeb.RoomLive do
   def handle_info({:game_ended, _}, socket) do
     {:noreply, assign(socket, status: :ended)}
   end
-
-  ## UI EVENTS
-
 end
