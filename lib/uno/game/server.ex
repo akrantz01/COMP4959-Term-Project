@@ -141,10 +141,12 @@ defmodule Uno.Game.Server do
   # GS-13: Add to auto-play set and schedule auto-turn after 60s.
   # The auto_play_set acts as the stale-timer guard: if the player reconnects
   # before the timer fires, GS-12 removes them from the set and handle_auto_play is a no-op.
+  # Sequence number prevents stale fires if the player reconnects and disconnects again.
   @impl true
   def handle_cast({:disconnect, player_id}, state) do
     new_state = %{state | auto_play_set: MapSet.put(state.auto_play_set, player_id)}
-    Process.send_after(self(), {:auto_play, player_id}, @disconnect_timeout)
+    sequence = if new_state.logic_state != nil, do: new_state.logic_state.sequence, else: -1
+    Process.send_after(self(), {:auto_play, player_id, sequence}, @disconnect_timeout)
     {:noreply, new_state}
   end
 
@@ -198,8 +200,10 @@ defmodule Uno.Game.Server do
   end
 
   @impl true
-  def handle_info({:auto_play, player_id}, state) do
-    if MapSet.member?(state.auto_play_set, player_id) do
+  def handle_info({:auto_play, player_id, sequence_number}, state) do
+    if MapSet.member?(state.auto_play_set, player_id) and
+         state.logic_state != nil and
+         state.logic_state.sequence == sequence_number do
       {:noreply, handle_auto_play(state, player_id)}
     else
       {:noreply, state}
@@ -237,7 +241,9 @@ defmodule Uno.Game.Server do
     logic = state.logic_state
     player_id = Logic.current_turn(logic)
 
-    unless MapSet.member?(state.auto_play_set, player_id) do
+    if MapSet.member?(state.auto_play_set, player_id) do
+      Process.send_after(self(), {:auto_play, player_id, logic.sequence}, 0)
+    else
       Process.send_after(
         self(),
         {:inactivity_timeout, player_id, logic.sequence},
