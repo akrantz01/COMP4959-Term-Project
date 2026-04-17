@@ -186,7 +186,6 @@ defmodule Uno.Room do
 
     # Added by Aarshdeep Vandal
     {:reply, {:error, :room_not_in_lobby}, state}
-
   end
 
   # Aarshdeep Vandal: I modified this function by using the player_id, desired_name, and state
