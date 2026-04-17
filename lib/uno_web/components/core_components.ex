@@ -440,7 +440,6 @@ defmodule UnoWeb.CoreComponents do
   attr :name, :string, required: true
   attr :class, :any, default: "size-4"
 
-  def icon(%{name: "hero-" <> _} = assigns), do: render_icon(assigns)
   def icon(%{name: "fas-" <> _} = assigns), do: render_icon(assigns)
   def icon(%{name: "far-" <> _} = assigns), do: render_icon(assigns)
   def icon(%{name: "fab-" <> _} = assigns), do: render_icon(assigns)
