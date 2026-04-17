@@ -26,6 +26,8 @@ defmodule Uno.Room do
           wins: non_neg_integer()
         }
 
+  @shutdown_timeout :timer.minutes(1)
+
   @enforce_keys [:room_id]
   defstruct [
     :room_id,
@@ -33,7 +35,8 @@ defmodule Uno.Room do
     players: %{},
     admin_id: nil,
     last_winner_id: nil,
-    games_played: 0
+    games_played: 0,
+    shutdown_timer: nil
   ]
 
   @typedoc """
@@ -45,7 +48,8 @@ defmodule Uno.Room do
           players: %{String.t() => player_meta()},
           admin_id: String.t() | nil,
           last_winner_id: String.t() | nil,
-          games_played: non_neg_integer()
+          games_played: non_neg_integer(),
+          shutdown_timer: reference() | nil
         }
 
   @typep state :: t()
@@ -164,6 +168,8 @@ defmodule Uno.Room do
         next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
         next_state = %{state | players: next_players, admin_id: next_admin_id}
 
+        next_state = maybe_start_shutdown_timer(next_state)
+
         left_event = %Events.PlayerLeft{player_id: player_id}
         :ok = PubSub.broadcast({:room, state.room_id}, left_event)
 
@@ -227,5 +233,17 @@ defmodule Uno.Room do
     players
     |> Map.keys()
     |> List.first()
+  end
+
+  defp maybe_start_shutdown_timer(state) do
+    has_connected =
+      Enum.any?(state.players, fn {_id, player} -> player.connected end)
+
+    if has_connected do
+      state
+    else
+      timer = Process.send_after(self(), :shutdown_timeout, @shutdown_timeout)
+      %{state | shutdown_timer: timer}
+    end
   end
 end
