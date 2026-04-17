@@ -56,17 +56,23 @@ defmodule Uno.Game.ServerTest do
 
   test "second play uses updated turn", %{pid: pid, logic: logic} do
     p1 = Logic.current_turn(logic)
-    card1 = Logic.next_playable_card(logic, p1)
+    # Wilds must be played with a declared colour; bare :wild as top_card has no
+    # playable_card?/2 clause and crashes next_playable_card on p2's turn.
+    card1 = logic |> Logic.next_playable_card(p1) |> declare_colour()
     assert :ok = Server.play(pid, p1, [card1])
 
-    assert_receive %Events.NextTurn{player_id: p2}
     assert_receive %Events.CardsPlayed{}
+    assert_receive %Events.NextTurn{player_id: p2}
 
     updated_logic = :sys.get_state(pid).logic_state
-    card2 = Logic.next_playable_card(updated_logic, p2)
+    card2 = updated_logic |> Logic.next_playable_card(p2) |> declare_colour()
     assert :ok = Server.play(pid, p2, [card2])
 
     assert_receive %Events.CardsPlayed{player_id: ^p2}
     assert_receive %Events.NextTurn{sequence: 2}
   end
+
+  defp declare_colour(:wild), do: {:wild, :red}
+  defp declare_colour(:wild_draw_4), do: {:wild_draw_4, :red}
+  defp declare_colour(card), do: card
 end

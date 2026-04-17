@@ -24,6 +24,7 @@ erl_crash.dump
 
 # Local test scripts (for Kevin)
 test_gs3.exs
+test/uno/game/server_test.exs
 
 # Ignore package tarball (built via "mix hex.build").
 uno-*.tar
