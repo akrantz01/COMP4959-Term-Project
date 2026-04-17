@@ -179,13 +179,33 @@ defmodule Uno.Room do
     end
   end
 
+  # Aarshdeep Vandal: I modified this function by using the state variable
   @impl true
-  def handle_call({:name, _player_id, _desired_name}, _from, %{state: :in_game} = _state) do
+  def handle_call({:name, _player_id, _desired_name}, _from, %{state: :in_game} = state) do
     # TODO: Implement name change when room in in game handler
+
+    # Added by Aarshdeep Vandal
+    {:reply, {:error, :room_not_in_lobby}, state}
+
   end
 
-  def handle_call({:name, _player_id, _desired_name}, _from, _state) do
+  # Aarshdeep Vandal: I modified this function by using the player_id, desired_name, and state
+  def handle_call({:name, player_id, desired_name}, _from, state) do
     # TODO: Implement name change when room in lobby handler
+
+    # Added by Aarshdeep Vandal
+    case Map.fetch(state.players, player_id) do
+      :error ->
+        {:reply, {:error, :player_not_found}, state}
+
+      {:ok, player} ->
+        updated_player = %{player | name: desired_name}
+        next_players = Map.put(state.players, player_id, updated_player)
+        next_state = %{state | players: next_players}
+
+        {:reply, :ok, next_state}
+    end
+
   end
 
   @impl true
