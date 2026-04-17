@@ -166,6 +166,26 @@ defmodule Uno.Game.Server do
 
   # -------------------- Private Helpers --------------------
 
+  # Returns :ok if cards form a legal multi-play group, error otherwise
+  @spec validate_multi_play([Logic.played_card()]) :: :ok | {:error, :invalid_multi_play}
+  defp validate_multi_play(cards) do
+    if Logic.valid_multi_play?(cards), do: :ok, else: {:error, :invalid_multi_play}
+  end
+
+  # Applies each card to the logic state in sequence.
+  # NOTE: Logic.play_cards/3 advances the turn per card, so multi-card plays (>1 card)
+  # will fail on the second card until Logic exposes a list-based play API.
+  @spec apply_cards(Logic.t(), Logic.player_id(), [Logic.played_card()]) ::
+          {:ok, Logic.t()} | {:error, atom()}
+  defp apply_cards(logic, player_id, cards) do
+    Enum.reduce_while(cards, {:ok, logic}, fn card, {:ok, current_logic} ->
+      case Logic.play_cards(current_logic, player_id, card) do
+        {:ok, new_logic} -> {:cont, {:ok, new_logic}}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
   # Broadcasts the cards_played event with the player's updated hand as a frequency map
   @spec broadcast_cards_played(map(), Logic.player_id(), [Logic.played_card()], [
           Logic.hand_card()

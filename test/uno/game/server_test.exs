@@ -33,6 +33,7 @@ defmodule Uno.Game.ServerTest do
   test "play valid card broadcasts CardsPlayed and NextTurn", %{pid: pid, logic: logic} do
     player_id = Logic.current_turn(logic)
     card = Logic.next_playable_card(logic, player_id) |> declare_colour()
+    card = Logic.next_playable_card(logic, player_id)
 
     assert :ok = Server.play(pid, player_id, [card])
 
@@ -43,6 +44,7 @@ defmodule Uno.Game.ServerTest do
   test "CardsPlayed hand does not contain played card", %{pid: pid, logic: logic} do
     player_id = Logic.current_turn(logic)
     card = Logic.next_playable_card(logic, player_id) |> declare_colour()
+    card = Logic.next_playable_card(logic, player_id)
 
     assert :ok = Server.play(pid, player_id, [card])
 
@@ -53,6 +55,7 @@ defmodule Uno.Game.ServerTest do
   test "NextTurn advances to the other player", %{pid: pid, logic: logic} do
     player_id = Logic.current_turn(logic)
     card = Logic.next_playable_card(logic, player_id) |> declare_colour()
+    card = Logic.next_playable_card(logic, player_id)
 
     assert :ok = Server.play(pid, player_id, [card])
 
@@ -63,12 +66,15 @@ defmodule Uno.Game.ServerTest do
   test "play with wrong player returns not_your_turn", %{pid: pid, logic: logic} do
     player_id = Logic.current_turn(logic)
     card = Logic.next_playable_card(logic, player_id) |> declare_colour()
+    card = Logic.next_playable_card(logic, player_id)
 
     assert {:error, :not_your_turn} = Server.play(pid, "wrong-player", [card])
   end
 
   test "second play uses updated turn", %{pid: pid, logic: logic} do
     p1 = Logic.current_turn(logic)
+    # Wilds must be played with a declared colour; bare :wild as top_card has no
+    # playable_card?/2 clause and crashes next_playable_card on p2's turn.
     card1 = logic |> Logic.next_playable_card(p1) |> declare_colour()
     assert :ok = Server.play(pid, p1, [card1])
 
