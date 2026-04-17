@@ -52,7 +52,7 @@ defmodule Uno.Room do
 
   @type call_result ::
           :ok
-          | {:ok, Events.PlayerJoined.t()}
+          | {:ok, Events.PlayerJoined.t() | Events.PlayerLeft.t()}
           | {:error, :player_not_found | :room_not_in_lobby | :not_room_admin}
 
   @spec start_link(any()) :: :ignore | {:error, any()} | {:ok, pid()}
@@ -91,6 +91,21 @@ defmodule Uno.Room do
   @spec name(Events.room_id(), Events.player_id(), String.t()) :: call_result()
   def name(room_id, player_id, desired_name) do
     GenServer.call(via_tuple(room_id), {:name, player_id, desired_name})
+  end
+
+  @doc """
+  Mark a player as disconnected from the room.
+
+  If the player has no wins, their metadata is removed.
+  If the player has wins, their metadata is retained and marked disconnected.
+
+  Returns
+    `{:ok, %Events.PlayerLeft{}}` on success, or
+    `{:error, :player_not_found}` if the player ID is invalid.
+  """
+  @spec leave(Events.room_id(), Events.player_id()) :: call_result()
+  def leave(room_id, player_id) do
+    GenServer.call(via_tuple(room_id), {:leave, player_id})
   end
 
   @doc """
@@ -139,6 +154,24 @@ defmodule Uno.Room do
   end
 
   @impl true
+  def handle_call({:leave, player_id}, _from, state) do
+    case Map.fetch(state.players, player_id) do
+      :error ->
+        {:reply, {:error, :player_not_found}, state}
+
+      {:ok, player} ->
+        {next_players, _removed?} = disconnect_or_remove_player(state.players, player_id, player)
+        next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
+        next_state = %{state | players: next_players, admin_id: next_admin_id}
+
+        left_event = %Events.PlayerLeft{player_id: player_id}
+        :ok = PubSub.broadcast({:room, state.room_id}, left_event)
+
+        {:reply, {:ok, left_event}, next_state}
+    end
+  end
+
+  @impl true
   def handle_call({:name, _player_id, _desired_name}, _from, %{state: :in_game} = _state) do
     # TODO: Implement name change when room in in game handler
   end
@@ -162,5 +195,37 @@ defmodule Uno.Room do
 
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
+  end
+
+  defp disconnect_or_remove_player(players, player_id, player) do
+    if player.wins > 0 do
+      {Map.put(players, player_id, %{player | connected: false}), false}
+    else
+      {Map.delete(players, player_id), true}
+    end
+  end
+
+  defp maybe_reassign_admin(admin_id, player_id, players) when admin_id == player_id,
+    do: replacement_admin_id(players)
+
+  defp maybe_reassign_admin(admin_id, _player_id, _players), do: admin_id
+
+  defp replacement_admin_id(players) do
+    connected_player_id(players) || any_player_id(players)
+  end
+
+  defp connected_player_id(players) do
+    players
+    |> Enum.find(fn {_id, player} -> player.connected end)
+    |> case do
+      {id, _player} -> id
+      nil -> nil
+    end
+  end
+
+  defp any_player_id(players) do
+    players
+    |> Map.keys()
+    |> List.first()
   end
 end

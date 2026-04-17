@@ -43,10 +43,40 @@ defmodule UnoWeb.RoomPresenceChannel do
     end
   end
 
+  @impl true
+  def terminate(_reason, socket) do
+    room_id = socket.assigns[:room_id]
+    player_id = socket.assigns[:player_id]
+
+    if is_binary(room_id) and is_binary(player_id) do
+      _ = Presence.untrack(socket, player_id)
+
+      if final_presence_for_player?(socket, player_id) do
+        _ = leave_room(room_id, player_id)
+      end
+    end
+
+    :ok
+  end
+
   defp join_room(room_id, player_id) do
     Uno.Room.join(room_id, player_id)
   catch
     :exit, {:noproc, _} -> {:error, :room_not_found}
     :exit, _reason -> {:error, :room_unavailable}
+  end
+
+  defp leave_room(room_id, player_id) do
+    Uno.Room.leave(room_id, player_id)
+  catch
+    :exit, {:noproc, _} -> {:error, :room_not_found}
+    :exit, _reason -> {:error, :room_unavailable}
+  end
+
+  defp final_presence_for_player?(socket, player_id) do
+    case Presence.list(socket) do
+      %{^player_id => %{metas: metas}} when is_list(metas) and metas != [] -> false
+      _ -> true
+    end
   end
 end
