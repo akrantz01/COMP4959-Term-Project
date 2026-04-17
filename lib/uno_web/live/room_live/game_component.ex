@@ -46,4 +46,27 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def update(%{player_id: player_id}, socket) do
     {:ok, assign(socket, :player_id, player_id)}
   end
+
+  # --- Private UI helpers ---
+
+  defp flatten_hand(hand),
+    do:
+      Enum.filter(hand, fn {_, count} -> count > 0 end)
+      |> Enum.sort_by(fn {card, _} -> card_order(card) end)
+
+  defp card_order(:wild), do: 0
+  defp card_order(:wild_draw_4), do: 1
+
+  defp card_order({colour, type}),
+    do: card_order_colour(colour) + card_order_type(type)
+
+  defp card_order_colour(:red), do: 100
+  defp card_order_colour(:yellow), do: 200
+  defp card_order_colour(:green), do: 300
+  defp card_order_colour(:blue), do: 400
+
+  defp card_order_type(n) when is_integer(n) and n in 0..9, do: n
+  defp card_order_type(:skip), do: 10
+  defp card_order_type(:reverse), do: 11
+  defp card_order_type(:draw_2), do: 12
 end

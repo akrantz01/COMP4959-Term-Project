@@ -1,30 +1,71 @@
-<main>
-  <details>
-    <summary>State</summary>
-    <div>
-      <p>Player ID: {@player_id}</p>
-      <p>Sequence: {@sequence}</p>
-      <p>Hand: {inspect(@hand)}</p>
-      <p>Opponents: {inspect(@opponents)}</p>
-      <p>Top Card: {inspect(@top_card)}</p>
-      <p>Direction: {@direction}</p>
-      <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
-      <p>Chain: {inspect(@chain)}</p>
-    </div>
-  </details>
+<div class="grid flex-1 min-h-0 grid-rows-[auto_1fr_auto]">
+  <section class="flex-none">
+    <details>
+      <summary>State</summary>
+      <div>
+        <p>Player ID: {@player_id}</p>
+        <p>Sequence: {@sequence}</p>
+        <p>Hand: {inspect(@hand)}</p>
+        <p>Opponents: {inspect(@opponents)}</p>
+        <p>Top Card: {inspect(@top_card)}</p>
+        <p>Direction: {@direction}</p>
+        <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
+        <p>Chain: {inspect(@chain)}</p>
+      </div>
+    </details>
 
-  <section class="flex flex-wrap flex-row gap-4 justify-center">
-    <div :for={opponent <- @opponents} class="card bg-neutral text-neutral-content w-32">
-      <div class="card-body items-center text-center">
-        <h3 class="card-title flex-grow">{opponent.name}</h3>
-        <div class="flex-none flex flex-row items-center gap-x-3">
-          <div class="relative h-4 w-5" aria-hidden="true">
-            <div class="absolute left-0 top-0 h-4 w-3 rounded-sm border border-white/15 bg-white/80 shadow-sm" />
-            <div class="absolute left-1.5 top-0.75 h-4 w-3 rounded-sm border border-white/15 bg-white shadow-sm" />
+    <div class="flex flex-wrap flex-row gap-4 justify-center">
+      <div :for={opponent <- @opponents} class="card bg-neutral text-neutral-content w-32">
+        <div class="card-body items-center text-center">
+          <h3 class="card-title flex-grow">{opponent.name}</h3>
+          <div class="flex-none flex flex-row items-center gap-x-3">
+            <div class="relative h-4 w-5" aria-hidden="true">
+              <div class="absolute left-0 top-0 h-4 w-3 rounded-sm border border-white/15 bg-white/80 shadow-sm" />
+              <div class="absolute left-1.5 top-0.75 h-4 w-3 rounded-sm border border-white/15 bg-white shadow-sm" />
+            </div>
+            <span>{opponent.cards}</span>
           </div>
-          <span>{opponent.cards}</span>
         </div>
       </div>
     </div>
   </section>
-</main>
+
+  <section></section>
+
+  <section
+    id="hand-scroll"
+    phx-hook=".HandScroll"
+    class="max-w-full min-h-50 overflow-x-auto"
+  >
+    <div class="flex flex-row justify-center gap-x-2 py-4 min-w-full w-fit">
+      <%= for {card, count} <- flatten_hand(@hand), _ <- 1..count do %>
+        <div>
+          <.uno_card card={card} />
+        </div>
+      <% end %>
+    </div>
+  </section>
+  <script :type={Phoenix.LiveView.ColocatedHook} name=".HandScroll">
+    function update(el) {
+      const { scrollLeft, scrollWidth, clientWidth } = el;
+      const l = scrollLeft > 1 ? "transparent, black 3rem," : "";
+      const r = scrollLeft + clientWidth < scrollWidth - 1 ? ",black calc(100% - 3rem), transparent" : "";
+      el.style.maskImage = (l || r) ? `linear-gradient(to right, ${l}black${r})` : "none";
+    }
+
+    export default {
+      mounted() {
+        this.onScroll = () => update(this.el);
+        this.el.addEventListener("scroll", this.onScroll);
+        this.observer = new ResizeObserver(() => update(this.el));
+        this.observer.observe(this.el);
+        update(this.el);
+      },
+      updated() { update(this.el); },
+      destroyed() {
+        this.el.removeEventListener("scroll", this.onScroll);
+        this.observer.disconnect();
+      },
+    };
+  </script>
+</div>
