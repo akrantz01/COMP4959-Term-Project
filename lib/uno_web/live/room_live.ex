@@ -35,5 +35,65 @@ defmodule UnoWeb.RoomLive do
 
   def handle_info({:game_ended, _}, socket) do
     {:noreply, assign(socket, status: :ended)}
+  alias Uno.{Events, PubSub}
+  alias UnoWeb.Forms.RoomForm
+  alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
+
+  def mount(%{"id" => id}, _session, socket) do
+    # TODO: remove once room and game exist
+    PubSub.subscribe({:room, id})
+    PubSub.subscribe({:game, id})
+
+    # TODO: retrieve from session
+    player_id = Nanoid.generate()
+
+    {:ok,
+     socket
+     |> assign(room_id: id, player_id: player_id, state: :lobby)
+     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
   end
+
+  # --- Temporary, remove once more is implemented ---
+
+  def handle_event("room-update", %{"room" => params}, socket) do
+    changeset = RoomForm.changeset(params)
+
+    case RoomForm.parse(changeset) do
+      {:ok, data} ->
+        {:noreply,
+         assign(socket,
+           player_id: data.player_id,
+           state: data.state,
+           room_form: RoomForm.to_form(%{changeset | action: :validate})
+         )}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, room_form: RoomForm.to_form(changeset))}
+    end
+  end
+
+  # --- end temporary ---
+
+  @forwarded_events %{
+    Events.PlayerJoined => :room,
+    Events.PlayerLeft => :room,
+    Events.GameStarted => :room,
+    Events.GameEnded => :room,
+    Events.Sync => :game,
+    Events.NextTurn => :game,
+    Events.CardsPlayed => :game,
+    Events.CardsDrawn => :game
+  }
+
+  def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
+    with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]),
+         do: send_update(component, id: id, event: msg)
+
+    {:noreply, socket}
+  end
+
+  defp component_target(state, :both), do: component_target(state, state)
+  defp component_target(:room, :room), do: {RoomComponent, "lobby"}
+  defp component_target(:game, :game), do: {GameComponent, "game"}
+  defp component_target(_state, _spec), do: nil
 end

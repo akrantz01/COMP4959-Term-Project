@@ -1,15 +1,20 @@
-<h1>Room: {@room_id}</h1>
+<main class="flex min-h-dvh flex-col">
+  <div class="flex-none">
+    <h1>Room: {@room_id}</h1>
 
-<.live_component
-  :if={@status == :waiting}
-  module={UnoWeb.RoomLive.LobbyComponent}
-  id="lobby"
-  players={@players}
-  status={@status}
-/>
+    <.form for={@room_form} phx-change="room-update" class="flex gap-x-4">
+      <.input field={@room_form[:player_id]} label="Player ID" />
+      <.input field={@room_form[:state]} label="State" type="select" options={[:lobby, :game]} />
+    </.form>
+  </div>
 
-<.live_component
-  :if={@status == :playing}
-  module={UnoWeb.RoomLive.GameComponent}
-  id="game"
-/>
+  <div class="flex-1 min-h-0 flex flex-col">
+    <.live_component :if={@state == :lobby} module={LobbyComponent} id="lobby" />
+    <.live_component
+      :if={@state == :game}
+      module={GameComponent}
+      id="game"
+      player_id={@player_id}
+    />
+  </div>
+</main>
