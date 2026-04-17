@@ -33,7 +33,9 @@ defmodule Uno.Room do
     players: %{},
     admin_id: nil,
     last_winner_id: nil,
-    games_played: 0
+    games_played: 0,
+    game_pid: nil,
+    game_ref: nil
   ]
 
   @typedoc """
@@ -45,7 +47,9 @@ defmodule Uno.Room do
           players: %{String.t() => player_meta()},
           admin_id: String.t() | nil,
           last_winner_id: String.t() | nil,
-          games_played: non_neg_integer()
+          games_played: non_neg_integer(),
+          game_pid: pid() | nil,
+          game_ref: reference() | nil
         }
 
   @typep state :: t()
@@ -198,7 +202,13 @@ defmodule Uno.Room do
     if connected_count < 2 do
       {:reply, {:error, :not_enough_players}, state}
     else
-      {:reply, :ok, state}
+      player_ids = Map.keys(state.players)
+      {:ok, game_pid} = Uno.Game.Server.start_link(state.room_id, player_ids)
+      game_ref = Process.monitor(game_pid)
+
+      next_state = %{state | state: :in_game, game_pid: game_pid, game_ref: game_ref}
+
+      {:reply, :ok, next_state}
     end
   end
 
