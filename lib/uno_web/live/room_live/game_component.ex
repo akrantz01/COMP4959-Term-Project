@@ -78,23 +78,30 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   def update(%{event: %Uno.Events.CardsPlayed{} = event}, socket) do
     {:ok,
-     enqueue_card_animation(socket, %{
+     socket
+     |> update_hands(event)
+     |> enqueue_card_animation(%{
        kind: :played,
        actor_id: event.player_id,
        cards: event.played_cards
      })}
   end
 
-  def update(%{event: %Uno.Events.CardsDrawn{} = event}, socket) do
+  def update(
+        %{event: %Uno.Events.CardsDrawn{} = event},
+        %{assigns: %{player_id: player_id}} = socket
+      ) do
     cards =
-      if event.player_id == socket.assigns.player_id do
+      if event.player_id == player_id do
         event.drawn_cards
       else
         List.duplicate(:hidden, length(event.drawn_cards))
       end
 
     {:ok,
-     enqueue_card_animation(socket, %{kind: :drawn, actor_id: event.player_id, cards: cards})}
+     socket
+     |> update_hands(event)
+     |> enqueue_card_animation(%{kind: :drawn, actor_id: event.player_id, cards: cards})}
   end
 
   def update(%{event: %Uno.Events.Sync{} = event}, %{assigns: %{player_id: player_id}} = socket) do
@@ -133,6 +140,28 @@ defmodule UnoWeb.RoomLive.GameComponent do
   end
 
   # --- Private helpers
+
+  defp update_hands(
+         %{assigns: %{player_id: player_id}} = socket,
+         %{player_id: actor_id, hand: hand}
+       )
+       when player_id == actor_id,
+       do: assign(socket, :hand, hand)
+
+  defp update_hands(
+         %{assigns: %{opponents: opponents}} = socket,
+         %{player_id: player_id, hand: hand}
+       ) do
+    index = Enum.find_index(opponents, fn %{id: id} -> player_id == id end)
+
+    assign(
+      socket,
+      :opponents,
+      List.update_at(opponents, index, fn item ->
+        Map.put(item, :cards, Map.values(hand) |> Enum.sum())
+      end)
+    )
+  end
 
   defp enqueue_card_animation(
          %{
