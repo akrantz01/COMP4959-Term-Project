@@ -61,7 +61,7 @@ defmodule Uno.Events do
     The room has re-assigned the admin status to a new player
     """
 
-    @enforce_keys[:new_admin_id]
+    @enforce_keys [:new_admin_id]
     defstruct [:new_admin_id]
 
     @type t :: %__MODULE__{
