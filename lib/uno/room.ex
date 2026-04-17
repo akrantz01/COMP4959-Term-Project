@@ -204,7 +204,6 @@ defmodule Uno.Room do
 
         {:reply, :ok, next_state}
     end
-
   end
 
   @impl true
