@@ -97,9 +97,19 @@ defmodule Uno.Game.Server do
     {:ok, server_state}
   end
 
+  # GS-12: Remove from auto-play set and broadcast full game state to all subscribers.
   @impl true
-  def handle_cast({:connect, _player_id}, state) do
-    {:noreply, state}
+  def handle_cast({:connect, player_id}, state) do
+    new_state = %{state | auto_play_set: MapSet.delete(state.auto_play_set, player_id)}
+
+    new_state =
+      if new_state.logic_state != nil do
+        enqueue_broadcast(new_state, build_sync(new_state))
+      else
+        new_state
+      end
+
+    {:noreply, new_state}
   end
 
   @impl true
@@ -183,6 +193,29 @@ defmodule Uno.Game.Server do
   def handle_info(_msg, state), do: {:noreply, state}
 
   # -------------------- Private Helpers --------------------
+
+  # Builds a full-state Sync event from the current logic state.
+  @spec build_sync(map()) :: Events.Sync.t()
+  defp build_sync(state) do
+    logic = state.logic_state
+
+    players_map = logic.players |> :queue.to_list() |> Map.new(fn {id, name} -> {id, name} end)
+
+    hands_map =
+      logic
+      |> Logic.player_hands()
+      |> Map.new(fn {id, hand} -> {id, Enum.frequencies(hand)} end)
+
+    %Events.Sync{
+      sequence: logic.sequence,
+      current_player_id: Logic.current_turn(logic),
+      top_card: logic.top_card,
+      direction: logic.direction,
+      hands: hands_map,
+      players: players_map,
+      chain: state.chain
+    }
+  end
 
   # GS-11: Sends event immediately if no broadcast is in flight; otherwise enqueues it.
   # The first event in a burst goes out at t=0; each subsequent one waits @broadcast_delay ms.
