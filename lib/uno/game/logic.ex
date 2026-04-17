@@ -195,6 +195,7 @@ defmodule Uno.Game.Logic do
   end
 
   @spec check_multi_play([played_card()]) :: :ok | {:error, :invalid_multi_play}
+  defp check_multi_play([]), do: {:error, :invalid_multi_play}
   defp check_multi_play([_single_card]), do: :ok
 
   defp check_multi_play(played_cards) do
