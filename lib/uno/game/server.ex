@@ -163,6 +163,9 @@ defmodule Uno.Game.Server do
     {:noreply, expire_uno_call_buffer(state, player_id, sequence_number)}
   end
 
+  @impl true
+  def handle_info(_msg, state), do: {:noreply, state}
+
   # -------------------- Private Helpers --------------------
 
   # Returns :ok if cards form a legal multi-play group, error otherwise
