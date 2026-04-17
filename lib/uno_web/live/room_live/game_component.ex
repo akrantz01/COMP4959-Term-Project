@@ -154,13 +154,17 @@ defmodule UnoWeb.RoomLive.GameComponent do
        ) do
     index = Enum.find_index(opponents, fn %{id: id} -> player_id == id end)
 
-    assign(
-      socket,
-      :opponents,
-      List.update_at(opponents, index, fn item ->
-        Map.put(item, :cards, Map.values(hand) |> Enum.sum())
-      end)
-    )
+    if is_integer(index) do
+      assign(
+        socket,
+        :opponents,
+        List.update_at(opponents, index, fn item ->
+          Map.put(item, :cards, Map.values(hand) |> Enum.sum())
+        end)
+      )
+    else
+      socket
+    end
   end
 
   defp enqueue_card_animation(
