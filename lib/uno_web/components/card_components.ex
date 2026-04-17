@@ -56,7 +56,56 @@ defmodule UnoWeb.CardComponents do
     lg: ["w-40 h-60"]
   }
 
+  @stack_rotations ["rotate-0", "rotate-4", "-rotate-10", "-rotate-8", "rotate-14"]
+
+  attr :class, :string, default: nil
+  attr :rest, :global
+  slot :card, required: true
+
+  def card_stack(assigns) do
+    assigns = assign(assigns, cards: Enum.zip(assigns.card, Stream.cycle(@stack_rotations)))
+
+    ~H"""
+    <div class={["grid place-items-center", @class]} {@rest}>
+      <div
+        :for={{card, rotation} <- Enum.reverse(@cards)}
+        class={["[grid-area:1/1]", rotation]}
+      >
+        {render_slot(card)}
+      </div>
+    </div>
+    """
+  end
+
+  attr :size, :atom, values: ~w(md lg)a, default: :md
+  attr :class, :string, default: nil
+  attr :rest, :global
+
+  def flipped_card(assigns) do
+    assigns = assign(assigns, :size, @sizes[assigns.size])
+
+    ~H"""
+    <div
+      class={[
+        @size,
+        "rounded-2xl relative select-none",
+        "bg-black",
+        "shadow-[0_2px_4px_rgba(0,0,0,0.3),0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
+        @class
+      ]}
+      {@rest}
+    >
+      <div class="absolute top-4.5 bottom-4.5 left-3.5 right-3.5 [border-radius:50%/46%] -rotate-12 bg-[#d72600] flex items-center justify-center overflow-hidden shadow-[0_0_0_3px_rgba(255,255,255,0.15)]">
+        <span class="transform-[perspective(1px)_rotate(78deg)] text-4xl font-black text-white tracking-widest [text-shadow:2px_2px_4px_rgba(0,0,0,0.4)]">
+          UNO
+        </span>
+      </div>
+    </div>
+    """
+  end
+
   attr :card, :any, required: true
+  attr :selectable, :boolean, default: true
   attr :size, :atom, values: ~w(md lg)a, default: :md
   attr :class, :string, default: nil
   attr :rest, :global
@@ -80,11 +129,11 @@ defmodule UnoWeb.CardComponents do
     <div
       class={[
         @size,
-        "rounded-2xl relative cursor-pointer select-none",
+        "rounded-2xl relative select-none",
         "transition-all duration-200 ease-out",
         "shadow-[0_2px_4px_rgba(0,0,0,0.3),0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
-        "hover:-translate-y-2 hover:scale-103",
-        "hover:shadow-[0_12px_28px_rgba(0,0,0,0.35),0_4px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
+        @selectable &&
+          "cursor-pointer hover:-translate-y-2 hover:scale-103 hover:shadow-[0_12px_28px_rgba(0,0,0,0.35),0_4px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
         if(@wild?, do: "bg-[#1a1a1a]", else: @c.bg),
         @played? && @c.glow,
         @played? && ["border-4", @c.border],
