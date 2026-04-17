@@ -88,9 +88,10 @@ defmodule Uno.Events do
     Synchronize the current game state with all the clients.
     """
 
-    @enforce_keys [:sequence, :top_card, :direction, :hands, :players]
+    @enforce_keys [:sequence, :current_player_id, :top_card, :direction, :hands, :players]
     defstruct [
       :sequence,
+      :current_player_id,
       :top_card,
       :direction,
       :hands,
@@ -101,6 +102,7 @@ defmodule Uno.Events do
 
     @type t :: %__MODULE__{
             sequence: non_neg_integer(),
+            current_player_id: Uno.Events.player_id(),
             top_card: Uno.Events.played_card(),
             direction: Uno.Events.direction(),
             hands: %{String.t() => %{Uno.Events.hand_card() => non_neg_integer()}},
