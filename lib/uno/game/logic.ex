@@ -60,7 +60,7 @@ defmodule Uno.Game.Logic do
     colour_cards |> List.flatten() |> Kernel.++(wildcards)
   end
 
-  def shuffle_deck(deck) do
+  defp shuffle_deck(deck) do
     deck |> Enum.shuffle()
   end
 
@@ -295,7 +295,7 @@ defmodule Uno.Game.Logic do
 
   # GL-8 (Helper function to flip direction)
   @spec apply_reverse(direction(), [played_card()]) :: {direction(), boolean()}
-  def apply_reverse(direction, played_cards) do
+  defp apply_reverse(direction, played_cards) do
     reverse_count = count_card_type(played_cards, :reverse)
 
     new_direction =
@@ -309,19 +309,19 @@ defmodule Uno.Game.Logic do
   end
 
   @spec flip_direction(direction()) :: direction()
-  def flip_direction(:ltr), do: :rtl
-  def flip_direction(:rtl), do: :ltr
+  defp flip_direction(:ltr), do: :rtl
+  defp flip_direction(:rtl), do: :ltr
 
   # Gl-9 (Helper function to count the number of skips)
   @spec apply_skip([played_card()]) :: non_neg_integer()
-  def apply_skip(played_cards) do
+  defp apply_skip(played_cards) do
     count_card_type(played_cards, :skip)
   end
 
   # GL-10
   @spec apply_chain(chain() | nil, [played_card()]) ::
           {:ok, chain() | nil} | {:error, :mixed_chain}
-  def apply_chain(chain, played_cards) do
+  defp apply_chain(chain, played_cards) do
     draw_2_count =
       Enum.count(played_cards, fn
         {_colour, :draw_2} -> true
@@ -351,29 +351,29 @@ defmodule Uno.Game.Logic do
 
   @spec apply_draw_2_chain(chain() | nil, non_neg_integer()) ::
           {:ok, chain()} | {:error, :mixed_chain}
-  def apply_draw_2_chain(nil, count) do
+  defp apply_draw_2_chain(nil, count) do
     {:ok, %{type: :draw_2, amount: count * 2}}
   end
 
-  def apply_draw_2_chain(%{type: :draw_2, amount: amount}, count) do
+  defp apply_draw_2_chain(%{type: :draw_2, amount: amount}, count) do
     {:ok, %{type: :draw_2, amount: amount + count * 2}}
   end
 
-  def apply_draw_2_chain(%{type: :wild_draw_4}, _count) do
+  defp apply_draw_2_chain(%{type: :wild_draw_4}, _count) do
     {:error, :mixed_chain}
   end
 
   @spec apply_wild_draw_4_chain(chain() | nil, non_neg_integer()) ::
           {:ok, chain()} | {:error, :mixed_chain}
-  def apply_wild_draw_4_chain(nil, count) do
+  defp apply_wild_draw_4_chain(nil, count) do
     {:ok, %{type: :wild_draw_4, amount: count * 4}}
   end
 
-  def apply_wild_draw_4_chain(%{type: :wild_draw_4, amount: amount}, count) do
+  defp apply_wild_draw_4_chain(%{type: :wild_draw_4, amount: amount}, count) do
     {:ok, %{type: :wild_draw_4, amount: amount + count * 4}}
   end
 
-  def apply_wild_draw_4_chain(%{type: :draw_2}, _count) do
+  defp apply_wild_draw_4_chain(%{type: :draw_2}, _count) do
     {:error, :mixed_chain}
   end
 
@@ -381,10 +381,10 @@ defmodule Uno.Game.Logic do
   # Validates that a multi-card play is internally legal
   # same number/type for normal cards, or same wild type for wild cards.
   @spec valid_multi_play?([played_card()]) :: boolean()
-  def valid_multi_play?([]), do: false
-  def valid_multi_play?([_single_card]), do: true
+  defp valid_multi_play?([]), do: false
+  defp valid_multi_play?([_single_card]), do: true
 
-  def valid_multi_play?(played_cards) do
+  defp valid_multi_play?(played_cards) do
     cond do
       all_same_normal_type?(played_cards) -> true
       all_same_wild_type?(played_cards) -> true
@@ -393,7 +393,7 @@ defmodule Uno.Game.Logic do
   end
 
   @spec all_same_normal_type?([played_card()]) :: boolean()
-  def all_same_normal_type?(played_cards) do
+  defp all_same_normal_type?(played_cards) do
     case played_cards do
       [{first_colour, first_type} | rest] when first_colour in [:red, :green, :blue, :yellow] ->
         Enum.all?(rest, fn
@@ -410,7 +410,7 @@ defmodule Uno.Game.Logic do
   end
 
   @spec all_same_wild_type?([played_card()]) :: boolean()
-  def all_same_wild_type?(played_cards) do
+  defp all_same_wild_type?(played_cards) do
     case played_cards do
       [{first_wild_type, _first_colour} | rest] when first_wild_type in [:wild, :wild_draw_4] ->
         Enum.all?(rest, fn
