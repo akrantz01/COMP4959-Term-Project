@@ -349,4 +349,33 @@ defmodule Uno.Game.Logic do
         false
     end
   end
+
+  # GL-12
+  @spec draw_card(t(), player_id()) :: {:ok, t(), boolean()}
+  def draw_card(game, player_id) do
+    game =
+      if deck_empty(game) do
+        %{game | deck: generate_deck() |> shuffle_deck()}
+      else
+        game
+      end
+
+    [drawn_card | remaining_deck] = game.deck
+
+    game =
+      game
+      |> Map.put(:deck, remaining_deck)
+      |> add_to_hand(player_id, drawn_card)
+
+    {:ok, game, playable_card?(drawn_card, game.top_card)}
+  end
+
+  defp deck_empty(game) do
+    game.deck == []
+  end
+
+  defp add_to_hand(game, player_id, card) do
+    new_hand = [card | Map.get(game.hands, player_id, [])]
+    %{game | hands: Map.put(game.hands, player_id, new_hand)}
+  end
 end
