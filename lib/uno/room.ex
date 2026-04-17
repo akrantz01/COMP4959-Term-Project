@@ -237,6 +237,11 @@ defmodule Uno.Room do
     |> List.first()
   end
 
+  @impl true
+  def handle_info(:shutdown_timeout, state) do
+    {:stop, :normal, state}
+  end
+
   defp cancel_shutdown_timer(%{shutdown_timer: nil} = state), do: state
 
   defp cancel_shutdown_timer(%{shutdown_timer: timer} = state) do
