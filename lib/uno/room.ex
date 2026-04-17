@@ -52,7 +52,7 @@ defmodule Uno.Room do
 
   @type call_result ::
           :ok
-          | {:ok, map()}
+          | {:ok, Events.PlayerJoined.t()}
           | {:error, :player_not_found | :room_not_in_lobby | :not_room_admin}
 
   @spec start_link(any()) :: :ignore | {:error, any()} | {:ok, pid()}
@@ -74,7 +74,7 @@ defmodule Uno.Room do
   Join a player to the room.
 
   Returns
-    `:ok` on success or `{:error, :player_not_found}` if the player ID is invalid.
+    `{:ok, %Events.PlayerJoined{}}` on success.
   """
   @spec join(Events.room_id(), Events.player_id()) :: call_result()
   def join(room_id, player_id) do
@@ -119,8 +119,9 @@ defmodule Uno.Room do
       {:ok, player} ->
         updated_players = Map.put(state.players, player_id, %{player | connected: true})
         next_state = %{state | players: updated_players}
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
 
-        {:reply, {:ok, %{player_id: player_id, name: player.name, new?: false}}, next_state}
+        {:reply, {:ok, joined_event}, next_state}
 
       :error ->
         player_name = random_player_name()
@@ -129,14 +130,11 @@ defmodule Uno.Room do
           Map.put(state.players, player_id, %{name: player_name, connected: true, wins: 0})
 
         next_state = %{state | players: updated_players, admin_id: state.admin_id || player_id}
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player_name}
 
-        :ok =
-          PubSub.broadcast(
-            {:room, state.room_id},
-            %Events.PlayerJoined{player_id: player_id, name: player_name}
-          )
+        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
 
-        {:reply, {:ok, %{player_id: player_id, name: player_name, new?: true}}, next_state}
+        {:reply, {:ok, joined_event}, next_state}
     end
   end
 
