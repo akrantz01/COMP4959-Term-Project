@@ -60,10 +60,10 @@
       data-id={@current_card_animation.id}
       phx-hook=".CardAnimation"
       phx-target={@myself}
-      class="pointer-events-none absolute inset-x-0 z-10 bg-black/60 py-12 animate-[card-overlay-animation_1000ms_ease-in-out]"
+      class="pointer-events-none absolute inset-x-0 z-10 bg-black/60 py-12 animate-[card-overlay-animation_1000ms_ease-in-out] [animation-fill-mode:forwards]"
       style={card_animation_style(@current_card_animation, @player_id)}
     >
-      <div class="flex flex-row flex-wrap gap-2 justify-center animate-[card-list-animation_1000ms_ease-in-out]">
+      <div class="flex flex-row flex-wrap gap-2 justify-center animate-[card-list-animation_1000ms_ease-in-out] [animation-fill-mode:forwards]">
         <div :for={card <- @current_card_animation.cards}>
           <%= if card == :hidden do %>
             <.flipped_card />
