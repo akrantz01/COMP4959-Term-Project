@@ -1,1 +1,30 @@
-<p>Game</p>
+<main>
+  <details>
+    <summary>State</summary>
+    <div>
+      <p>Player ID: {@player_id}</p>
+      <p>Sequence: {@sequence}</p>
+      <p>Hand: {inspect(@hand)}</p>
+      <p>Opponents: {inspect(@opponents)}</p>
+      <p>Top Card: {inspect(@top_card)}</p>
+      <p>Direction: {@direction}</p>
+      <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
+      <p>Chain: {inspect(@chain)}</p>
+    </div>
+  </details>
+
+  <section class="flex flex-wrap flex-row gap-4 justify-center">
+    <div :for={opponent <- @opponents} class="card bg-neutral text-neutral-content w-32">
+      <div class="card-body items-center text-center">
+        <h3 class="card-title flex-grow">{opponent.name}</h3>
+        <div class="flex-none flex flex-row items-center gap-x-3">
+          <div class="relative h-4 w-5" aria-hidden="true">
+            <div class="absolute left-0 top-0 h-4 w-3 rounded-sm border border-white/15 bg-white/80 shadow-sm" />
+            <div class="absolute left-1.5 top-0.75 h-4 w-3 rounded-sm border border-white/15 bg-white shadow-sm" />
+          </div>
+          <span>{opponent.cards}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
