@@ -20,7 +20,9 @@ defmodule Uno.Game.Logic do
           hands: %{player_id() => [hand_card()]},
           players: :queue.queue(player()),
           top_card: played_card() | nil,
-          direction: direction()
+          direction: direction(),
+          penalties: %{player_id() => non_neg_integer()},
+          vulnerable_player_id: player_id() | nil
         }
 
   defstruct sequence: 0,
@@ -28,7 +30,9 @@ defmodule Uno.Game.Logic do
             hands: %{},
             players: :queue.new(),
             top_card: nil,
-            direction: :ltr
+            direction: :ltr,
+            penalties: %{},
+            vulnerable_player_id: nil
 
   # task 1
   @spec generate_deck() :: [hand_card()]
