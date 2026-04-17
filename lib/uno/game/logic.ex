@@ -383,4 +383,18 @@ defmodule Uno.Game.Logic do
     new_hand = [card | Map.get(game.hands, player_id, [])]
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
   end
+
+  # GL-15
+  @spec skip(t(), player_id()) ::
+          {:ok, t(), player_id(), penalties()} | {:error, :not_your_turn}
+  def skip(game, player_id) do
+    with :ok <- check_turn(game, player_id) do
+      game =
+        game
+        |> Map.put(:sequence, game.sequence + 1)
+        |> advance_turn()
+
+      {:ok, game, current_turn(game), game.penalties}
+    end
+  end
 end
