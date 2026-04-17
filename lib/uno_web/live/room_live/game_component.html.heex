@@ -19,7 +19,7 @@
       <div
         :for={opponent <- @opponents}
         class={[
-          "card bg-neutral text-neutral-content w-32",
+          "card bg-neutral text-neutral-content w-32 relative overflow-hidden",
           opponent.id == @turn_player_id && "ring-3 ring-green-600"
         ]}
       >
@@ -32,6 +32,18 @@
             </div>
             <span>{opponent.cards}</span>
           </div>
+        </div>
+        <div
+          class={[
+            "absolute inset-0 flex items-center justify-center bg-black/60 transition-opacity duration-300",
+            if(@turn_skipped && opponent.id == @turn_player_id,
+              do: "opacity-100",
+              else: "opacity-0 pointer-events-none"
+            )
+          ]}
+          aria-hidden={not (@turn_skipped && opponent.id == @turn_player_id)}
+        >
+          <.icon name="hero-no-symbol" class="size-10 text-red-500" />
         </div>
       </div>
     </div>
