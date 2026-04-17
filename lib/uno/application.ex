@@ -13,6 +13,9 @@ defmodule Uno.Application do
       {DNSCluster, query: Application.get_env(:uno, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Uno.PubSub},
 
+      # Presence tracker for player connection status
+      UnoWeb.Presence,
+
       # Room Supervisor and Registry
       {Registry, keys: :unique, name: Uno.Room.Registry},
       Uno.Room.Supervisor,
