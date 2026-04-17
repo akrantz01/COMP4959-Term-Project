@@ -103,33 +103,31 @@ defmodule Uno.Game.Server do
     {:noreply, state}
   end
 
-  # GS-3: Validates the play, applies cards to the logic state, and broadcasts
-  # the resulting events. Handles chain accumulation and winner detection.
+  # GS-3/GS-4: Applies the full card list via Logic, broadcasts results.
+  # Logic.play_cards/3 now handles validation, chain, and skip advancement internally.
   @impl true
   def handle_call({:play, player_id, cards}, _from, state) do
-    with :ok <- validate_multi_play(cards),
-         {:ok, new_chain} <- Logic.apply_chain(state.chain, cards),
-         {:ok, new_logic} <- apply_cards(state.logic_state, player_id, cards) do
-      player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+    old_logic = state.logic_state
 
-      # TODO GS-4: iterate skip_count times, calling Logic.skip/2 and broadcasting
-      # next_turn for each skipped player (requires pb_task_15 to merge)
-      _skip_count = Logic.apply_skip(cards)
+    case Logic.play_cards(old_logic, player_id, cards) do
+      {:ok, new_logic} ->
+        player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
 
-      new_state = %{state | logic_state: new_logic, chain: new_chain}
+        broadcast_cards_played(new_state, player_id, cards, player_hand)
 
-      broadcast_cards_played(new_state, player_id, cards, player_hand)
+        if Enum.empty?(player_hand) do
+          Uno.PubSub.broadcast({:game, state.room_id}, %Events.GameEnded{winner_id: player_id})
+          {:stop, :normal, :ok, new_state}
+        else
+          skip_count = count_skips(cards)
+          apply_skips(old_logic, new_state, skip_count)
+          broadcast_next_turn(new_state, false)
+          {:reply, :ok, new_state}
+        end
 
-      if Enum.empty?(player_hand) do
-        # Player has emptied their hand — game over
-        Uno.PubSub.broadcast({:game, state.room_id}, %Events.GameEnded{winner_id: player_id})
-        {:stop, :normal, :ok, new_state}
-      else
-        broadcast_next_turn(new_state, false)
-        {:reply, :ok, new_state}
-      end
-    else
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -168,26 +166,6 @@ defmodule Uno.Game.Server do
 
   # -------------------- Private Helpers --------------------
 
-  # Returns :ok if cards form a legal multi-play group, error otherwise
-  @spec validate_multi_play([Logic.played_card()]) :: :ok | {:error, :invalid_multi_play}
-  defp validate_multi_play(cards) do
-    if Logic.valid_multi_play?(cards), do: :ok, else: {:error, :invalid_multi_play}
-  end
-
-  # Applies each card to the logic state in sequence.
-  # NOTE: Logic.play_cards/3 advances the turn per card, so multi-card plays (>1 card)
-  # will fail on the second card until Logic exposes a list-based play API.
-  @spec apply_cards(Logic.t(), Logic.player_id(), [Logic.played_card()]) ::
-          {:ok, Logic.t()} | {:error, atom()}
-  defp apply_cards(logic, player_id, cards) do
-    Enum.reduce_while(cards, {:ok, logic}, fn card, {:ok, current_logic} ->
-      case Logic.play_cards(current_logic, player_id, card) do
-        {:ok, new_logic} -> {:cont, {:ok, new_logic}}
-        error -> {:halt, error}
-      end
-    end)
-  end
-
   # Broadcasts the cards_played event with the player's updated hand as a frequency map
   @spec broadcast_cards_played(map(), Logic.player_id(), [Logic.played_card()], [
           Logic.hand_card()
@@ -198,6 +176,38 @@ defmodule Uno.Game.Server do
       played_cards: cards,
       hand: Enum.frequencies(hand)
     })
+  end
+
+  # Counts how many skip cards are in the played list.
+  @spec count_skips([Logic.played_card()]) :: non_neg_integer()
+  defp count_skips(cards) do
+    Enum.count(cards, fn
+      {_colour, :skip} -> true
+      _ -> false
+    end)
+  end
+
+  # Broadcasts NextTurn(skipped: true) for each skipped player.
+  # play_cards already advanced the turn past all of them, so we derive their IDs
+  # by peeking at the old state's player queue (positions 1..skip_count after current).
+  @spec apply_skips(Logic.t(), map(), non_neg_integer()) :: :ok
+  defp apply_skips(_old_logic, _state, 0), do: :ok
+
+  defp apply_skips(old_logic, state, skip_count) do
+    old_logic.players
+    |> :queue.to_list()
+    |> Enum.drop(1)
+    |> Enum.take(skip_count)
+    |> Enum.each(fn {skipped_id, _name} ->
+      Uno.PubSub.broadcast({:game, state.room_id}, %Events.NextTurn{
+        sequence: state.logic_state.sequence,
+        player_id: skipped_id,
+        top_card: state.logic_state.top_card,
+        direction: state.logic_state.direction,
+        skipped: true,
+        chain: state.chain
+      })
+    end)
   end
 
   # Broadcasts the next_turn event for the current logic state's active player
