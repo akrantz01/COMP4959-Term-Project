@@ -24,15 +24,29 @@ defmodule UnoWeb.RoomPresenceChannel do
 
   @impl true
   def handle_info(:after_join, socket) do
+    room_id = socket.assigns.room_id
     player_id = socket.assigns.player_id
 
     case Presence.track(socket, player_id, %{online_at: inspect(System.system_time(:second))}) do
       {:ok, _} ->
-        push(socket, "presence_state", Presence.list(socket))
-        {:noreply, socket}
+        case join_room(room_id, player_id) do
+          {:ok, _player} ->
+            push(socket, "presence_state", Presence.list(socket))
+            {:noreply, socket}
+
+          {:error, reason} ->
+            {:stop, {:room_join_failed, reason}, socket}
+        end
 
       {:error, reason} ->
         {:stop, {:presence_track_failed, reason}, socket}
     end
+  end
+
+  defp join_room(room_id, player_id) do
+    Uno.Room.join(room_id, player_id)
+  catch
+    :exit, {:noproc, _} -> {:error, :room_not_found}
+    :exit, _reason -> {:error, :room_unavailable}
   end
 end
