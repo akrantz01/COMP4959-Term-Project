@@ -491,4 +491,11 @@ defmodule Uno.Game.Logic do
       {:ok, game, current_turn(game), game.penalties}
     end
   end
+
+  # GL-19
+  # Doesn't handle errors if a player isn't found
+  @spec has_won(t(), player_id()) :: boolean()
+  def has_won(game, player_id) do
+    length(game.hands[player_id]) == 0
+  end
 end
