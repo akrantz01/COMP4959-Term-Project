@@ -383,4 +383,14 @@ defmodule Uno.Game.Logic do
     new_hand = [card | Map.get(game.hands, player_id, [])]
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
   end
+
+  # TODO: Temp stub
+  @spec uno(t(), player_id()) :: {:ok, t(), %{player_id() => non_neg_integer()}} | {:error, atom()}
+  def uno(game, player_id) do
+    if player_id do
+      {:ok, game, %{}}
+    else
+      {:error, :invalid_player_id}
+    end
+  end
 end
