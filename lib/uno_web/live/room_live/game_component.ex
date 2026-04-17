@@ -8,7 +8,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def mount(socket),
     do:
       {:ok,
-       assign(socket,
+       socket
+       |> assign(
          sequence: 0,
          hand: %{},
          opponents: [],
@@ -18,8 +19,11 @@ defmodule UnoWeb.RoomLive.GameComponent do
          direction: :ltr,
          vulnerable_player_id: nil,
          chain: nil,
-         selected_cards: []
-       )}
+         selected_cards: [],
+         current_card_animation: nil
+       )
+       |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())
+       |> Phoenix.LiveView.put_private(:card_animation_seq, 0)}
 
   def handle_event("toggle-card", params, socket) do
     case SelectedCard.parse(params) do
@@ -35,6 +39,29 @@ defmodule UnoWeb.RoomLive.GameComponent do
     end
   end
 
+  def handle_event(
+        "dismiss_card_animation",
+        %{"id" => id},
+        %{
+          assigns: %{current_card_animation: current},
+          private: %{card_animation_queue: queue}
+        } = socket
+      )
+      when not is_nil(current) and current.id == id do
+    case :queue.out(queue) do
+      {:empty, _} ->
+        {:noreply, assign(socket, :current_card_animation, nil)}
+
+      {{:value, next}, rest} ->
+        {:noreply,
+         socket
+         |> Phoenix.LiveView.put_private(:card_animation_queue, rest)
+         |> show_next_card_animation(next)}
+    end
+  end
+
+  def handle_event("dismiss_card_animation", _params, socket), do: {:noreply, socket}
+
   def update(%{event: %Uno.Events.NextTurn{} = event}, socket) do
     # TODO: validate sequence number
     {:ok,
@@ -49,6 +76,27 @@ defmodule UnoWeb.RoomLive.GameComponent do
      )}
   end
 
+  def update(%{event: %Uno.Events.CardsPlayed{} = event}, socket) do
+    {:ok,
+     enqueue_card_animation(socket, %{
+       kind: :played,
+       actor_id: event.player_id,
+       cards: event.played_cards
+     })}
+  end
+
+  def update(%{event: %Uno.Events.CardsDrawn{} = event}, socket) do
+    cards =
+      if event.player_id == socket.assigns.player_id do
+        event.drawn_cards
+      else
+        List.duplicate(:hidden, length(event.drawn_cards))
+      end
+
+    {:ok,
+     enqueue_card_animation(socket, %{kind: :drawn, actor_id: event.player_id, cards: cards})}
+  end
+
   def update(%{event: %Uno.Events.Sync{} = event}, %{assigns: %{player_id: player_id}} = socket) do
     hand = Map.fetch!(event.hands, player_id)
 
@@ -58,7 +106,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
       Enum.drop_while(event.players, fn {id, _} -> id != player_id end) |> Enum.drop(1)
 
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        sequence: event.sequence,
        hand: hand,
        opponents:
@@ -73,12 +122,42 @@ defmodule UnoWeb.RoomLive.GameComponent do
        turn_player_id: event.current_player_id,
        direction: event.direction,
        vulnerable_player_id: event.vulnerable_player_id,
-       chain: event.chain
-     )}
+       chain: event.chain,
+       current_card_animation: nil
+     )
+     |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())}
   end
 
   def update(%{player_id: player_id}, socket) do
     {:ok, assign(socket, :player_id, player_id)}
+  end
+
+  # --- Private helpers
+
+  defp enqueue_card_animation(
+         %{
+           assigns: %{current_card_animation: current},
+           private: %{card_animation_queue: queue}
+         } = socket,
+         card_animation
+       )
+       when not is_nil(current),
+       do:
+         Phoenix.LiveView.put_private(
+           socket,
+           :card_animation_queue,
+           :queue.in(card_animation, queue)
+         )
+
+  defp enqueue_card_animation(socket, card_animation),
+    do: show_next_card_animation(socket, card_animation)
+
+  defp show_next_card_animation(%{private: %{card_animation_seq: seq}} = socket, card_animation) do
+    next_seq = seq + 1
+
+    socket
+    |> Phoenix.LiveView.put_private(:card_animation_seq, next_seq)
+    |> assign(:current_card_animation, Map.put(card_animation, :id, next_seq))
   end
 
   # --- Private UI helpers ---
@@ -142,4 +221,16 @@ defmodule UnoWeb.RoomLive.GameComponent do
   defp card_order_type(:skip), do: 10
   defp card_order_type(:reverse), do: 11
   defp card_order_type(:draw_2), do: 12
+
+  defp card_animation_style(%{kind: :played, actor_id: actor}, player_id) when actor == player_id,
+    do: "--card-start: 100%"
+
+  defp card_animation_style(%{kind: :drawn, actor_id: actor}, player_id) when actor == player_id,
+    do: "--card-end: 100%"
+
+  defp card_animation_style(%{kind: :played}, _player_id),
+    do: "--card-start: -100%"
+
+  defp card_animation_style(%{kind: :drawn}, _player_id),
+    do: "--card-end: -100%"
 end
