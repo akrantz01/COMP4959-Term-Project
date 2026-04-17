@@ -134,6 +134,8 @@ defmodule Uno.Room do
 
   @impl true
   def handle_call({:join, player_id}, _from, state) do
+    state = cancel_shutdown_timer(state)
+
     case Map.fetch(state.players, player_id) do
       {:ok, player} ->
         updated_players = Map.put(state.players, player_id, %{player | connected: true})
@@ -233,6 +235,13 @@ defmodule Uno.Room do
     players
     |> Map.keys()
     |> List.first()
+  end
+
+  defp cancel_shutdown_timer(%{shutdown_timer: nil} = state), do: state
+
+  defp cancel_shutdown_timer(%{shutdown_timer: timer} = state) do
+    Process.cancel_timer(timer)
+    %{state | shutdown_timer: nil}
   end
 
   defp maybe_start_shutdown_timer(state) do
