@@ -116,7 +116,11 @@ defmodule Uno.Game.Server do
     case Logic.accept_chain(state.logic_state, player_id) do
       {:ok, updated_logic, penalties_map} ->
         Enum.each(penalties_map, fn {affected_player_id, penalty_count} ->
-          PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:penalty_assigned, affected_player_id, penalty_count})
+          PubSub.broadcast(
+            Uno.PubSub,
+            "game:#{state.room_id}",
+            {:penalty_assigned, affected_player_id, penalty_count}
+          )
         end)
 
         updated_state = %{state | logic_state: updated_logic}

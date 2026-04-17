@@ -349,8 +349,10 @@ defmodule Uno.Game.Logic do
         false
     end
   end
+
   # TODO: temp stub to allow server to compile
-  @spec accept_chain(t(), player_id()) :: {:ok, t(), %{player_id() => non_neg_integer()}} | {:error, atom()}
+  @spec accept_chain(t(), player_id()) ::
+          {:ok, t(), %{player_id() => non_neg_integer()}} | {:error, atom()}
   def accept_chain(game, player_id) do
     if player_id do
       {:ok, game, %{}}
