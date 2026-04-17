@@ -7,8 +7,7 @@ defmodule UnoWeb.RoomLive do
     player_id = socket.assigns[:player_id] || Nanoid.generate()
 
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(Uno.PubSub, "room:#{room_id}")
-      Uno.Room.join(room_id, player_id)
+      Uno.PubSub.subscribe({:room, room_id})
     end
 
     {:ok,
@@ -20,10 +19,6 @@ defmodule UnoWeb.RoomLive do
      )}
   end
 
-  def terminate(_reason, socket) do
-    Uno.Room.leave(socket.assigns.room_id, socket.assigns.player_id)
-    :ok
-  end
 
   ## HANDLE PUBSUB EVENTS
 
@@ -45,13 +40,4 @@ defmodule UnoWeb.RoomLive do
 
   ## UI EVENTS
 
-  def handle_event("start_game", _, socket) do
-    Uno.Room.start_game(socket.assigns.room_id)
-    {:noreply, socket}
-  end
-
-  def handle_event("end_game", _, socket) do
-    Uno.Room.end_game(socket.assigns.room_id)
-    {:noreply, socket}
-  end
 end
