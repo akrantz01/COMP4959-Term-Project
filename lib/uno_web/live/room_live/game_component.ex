@@ -70,6 +70,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
            }
          end),
        top_card: event.top_card,
+       turn_player_id: event.current_player_id,
        direction: event.direction,
        vulnerable_player_id: event.vulnerable_player_id,
        chain: event.chain
