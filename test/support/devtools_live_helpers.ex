@@ -123,6 +123,7 @@ defmodule UnoWeb.DevtoolsLiveHelpers do
     %{
       "sync" => %{
         "sequence" => "1",
+        "current_player_id" => "p1",
         "direction" => "ltr",
         "vulnerable_player_id" => "p2",
         "has_chain" => "false",
@@ -152,6 +153,7 @@ defmodule UnoWeb.DevtoolsLiveHelpers do
     %{
       "sync" => %{
         "sequence" => "2",
+        "current_player_id" => "p1",
         "direction" => "rtl",
         "vulnerable_player_id" => "p2",
         "has_chain" => "true",

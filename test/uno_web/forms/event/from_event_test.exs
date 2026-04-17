@@ -133,6 +133,7 @@ defmodule UnoWeb.Forms.Event.FromEventTest do
     test "round-trips with single player, no chain" do
       params = %{
         "sequence" => 1,
+        "current_player_id" => "p1",
         "direction" => "ltr",
         "vulnerable_player_id" => "p2",
         "has_chain" => false,
@@ -148,6 +149,7 @@ defmodule UnoWeb.Forms.Event.FromEventTest do
 
       expected = %Events.Sync{
         sequence: 1,
+        current_player_id: "p1",
         direction: :ltr,
         vulnerable_player_id: "p2",
         top_card: {:red, 5},
@@ -162,6 +164,7 @@ defmodule UnoWeb.Forms.Event.FromEventTest do
     test "round-trips with multiple players and chain" do
       params = %{
         "sequence" => 2,
+        "current_player_id" => "p1",
         "direction" => "rtl",
         "vulnerable_player_id" => "p2",
         "has_chain" => true,
@@ -188,6 +191,7 @@ defmodule UnoWeb.Forms.Event.FromEventTest do
 
       expected = %Events.Sync{
         sequence: 2,
+        current_player_id: "p1",
         direction: :rtl,
         vulnerable_player_id: "p2",
         top_card: {:green, :reverse},
