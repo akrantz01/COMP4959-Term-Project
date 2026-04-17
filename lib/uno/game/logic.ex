@@ -9,6 +9,7 @@ defmodule Uno.Game.Logic do
   @type played_card :: {colour(), card_type()} | {card_wild(), colour()}
   @type chain_type :: :draw_2 | :wild_draw_4
   @type chain :: %{type: chain_type(), amount: pos_integer()}
+  @type penalties :: %{player_id() => non_neg_integer()}
 
   @hand_size 7
   @type player_id :: String.t()
@@ -21,7 +22,7 @@ defmodule Uno.Game.Logic do
           players: :queue.queue(player()),
           top_card: played_card() | nil,
           direction: direction(),
-          penalties: %{player_id() => non_neg_integer()},
+          penalties: penalties(),
           vulnerable_player_id: player_id() | nil
         }
 
