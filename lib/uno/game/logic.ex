@@ -9,6 +9,7 @@ defmodule Uno.Game.Logic do
   @type played_card :: {colour(), card_type()} | {card_wild(), colour()}
   @type chain_type :: :draw_2 | :wild_draw_4
   @type chain :: %{type: chain_type(), amount: pos_integer()}
+  @type penalties :: %{player_id() => non_neg_integer()}
 
   @hand_size 7
   @type player_id :: String.t()
@@ -20,7 +21,9 @@ defmodule Uno.Game.Logic do
           hands: %{player_id() => [hand_card()]},
           players: :queue.queue(player()),
           top_card: played_card() | nil,
-          direction: direction()
+          direction: direction(),
+          penalties: penalties(),
+          vulnerable_player_id: player_id() | nil
         }
 
   defstruct sequence: 0,
@@ -28,7 +31,9 @@ defmodule Uno.Game.Logic do
             hands: %{},
             players: :queue.new(),
             top_card: nil,
-            direction: :ltr
+            direction: :ltr,
+            penalties: %{},
+            vulnerable_player_id: nil
 
   # task 1
   @spec generate_deck() :: [hand_card()]
@@ -348,5 +353,34 @@ defmodule Uno.Game.Logic do
       _ ->
         false
     end
+  end
+
+  # GL-12
+  @spec draw_card(t(), player_id()) :: {:ok, t(), boolean()}
+  def draw_card(game, player_id) do
+    game =
+      if deck_empty(game) do
+        %{game | deck: generate_deck() |> shuffle_deck()}
+      else
+        game
+      end
+
+    [drawn_card | remaining_deck] = game.deck
+
+    game =
+      game
+      |> Map.put(:deck, remaining_deck)
+      |> add_to_hand(player_id, drawn_card)
+
+    {:ok, game, playable_card?(drawn_card, game.top_card)}
+  end
+
+  defp deck_empty(game) do
+    game.deck == []
+  end
+
+  defp add_to_hand(game, player_id, card) do
+    new_hand = [card | Map.get(game.hands, player_id, [])]
+    %{game | hands: Map.put(game.hands, player_id, new_hand)}
   end
 end
