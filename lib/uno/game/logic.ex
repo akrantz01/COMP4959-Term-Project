@@ -23,7 +23,8 @@ defmodule Uno.Game.Logic do
           top_card: played_card() | nil,
           direction: direction(),
           penalties: penalties(),
-          vulnerable_player_id: player_id() | nil
+          vulnerable_player_id: player_id() | nil,
+          chain: chain() | nil
         }
 
   defstruct sequence: 0,
@@ -33,7 +34,8 @@ defmodule Uno.Game.Logic do
             top_card: nil,
             direction: :ltr,
             penalties: %{},
-            vulnerable_player_id: nil
+            vulnerable_player_id: nil,
+            chain: nil
 
   # task 1
   @spec generate_deck() :: [hand_card()]
