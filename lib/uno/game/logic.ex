@@ -201,24 +201,24 @@ defmodule Uno.Game.Logic do
     if valid_multi_play?(played_cards), do: :ok, else: {:error, :invalid_multi_play}
   end
 
-@spec check_all_in_hand(t(), player_id(), [played_card()]) :: :ok | {:error, :card_not_in_hand}
-defp check_all_in_hand(%__MODULE__{hands: hands}, player_id, played_cards) do
-  hand = Map.get(hands, player_id, [])
+  @spec check_all_in_hand(t(), player_id(), [played_card()]) :: :ok | {:error, :card_not_in_hand}
+  defp check_all_in_hand(%__MODULE__{hands: hands}, player_id, played_cards) do
+    hand = Map.get(hands, player_id, [])
 
-  played_cards
-  |> Enum.reduce_while(hand, fn played_card, remaining_hand ->
-    hand_card = to_hand_card(played_card)
+    played_cards
+    |> Enum.reduce_while(hand, fn played_card, remaining_hand ->
+      hand_card = to_hand_card(played_card)
 
-    case Enum.member?(remaining_hand, hand_card) do
-      true -> {:cont, List.delete(remaining_hand, hand_card)}
-      false -> {:halt, :missing}
+      case Enum.member?(remaining_hand, hand_card) do
+        true -> {:cont, List.delete(remaining_hand, hand_card)}
+        false -> {:halt, :missing}
+      end
+    end)
+    |> case do
+      :missing -> {:error, :card_not_in_hand}
+      _remaining_hand -> :ok
     end
-  end)
-  |> case do
-    :missing -> {:error, :card_not_in_hand}
-    _remaining_hand -> :ok
   end
-end
 
   @spec check_first_playable([played_card()], played_card() | nil) ::
           :ok | {:error, :card_not_playable}
