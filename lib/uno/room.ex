@@ -208,6 +208,8 @@ defmodule Uno.Room do
 
       next_state = %{state | state: :in_game, game_pid: game_pid, game_ref: game_ref}
 
+      PubSub.broadcast({:room, state.room_id}, %Events.GameStarted{game_id: state.room_id})
+
       {:reply, :ok, next_state}
     end
   end
