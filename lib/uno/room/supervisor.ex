@@ -1,4 +1,4 @@
-defmodule Uno.RoomSupervisor do
+defmodule Uno.Room.Supervisor do
   @moduledoc """
   Supervisor for room processes
   """
