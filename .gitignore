@@ -24,7 +24,14 @@ erl_crash.dump
 
 # Local test scripts (for Kevin)
 test_gs3.exs
+test_gs4.exs
+test_gs11.exs
+test_gs12.exs
+test_gs13.exs
+test_gs14.exs
+test_gs15.exs
 test/uno/game/server_test.exs
+test/uno/game/server_gs4_test.exs
 
 # Ignore package tarball (built via "mix hex.build").
 uno-*.tar
@@ -38,4 +45,6 @@ uno-*.tar
 # In case you use Node.js/npm, you want to ignore these.
 npm-debug.log
 /assets/node_modules/
+
+
 
