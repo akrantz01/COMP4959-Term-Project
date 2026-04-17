@@ -214,6 +214,12 @@ defmodule Uno.Room do
     end
   end
 
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{game_ref: ref} = state) do
+    next_state = %{state | state: :lobby, game_pid: nil, game_ref: nil}
+    {:noreply, next_state}
+  end
+
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
   end
