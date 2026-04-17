@@ -83,8 +83,20 @@ defmodule Uno.Game.Server do
     end
   end
 
-  # Handles auto-play for a disconnected player
-  defp handle_auto_play(state, _player_id), do: state
+  # GS-15: Plays the first valid card for the player, or draws until one is found.
+  # Guard: no-op if it is not this player's turn (stale auto_play timer or inactivity fire).
+  defp handle_auto_play(state, player_id) do
+    logic = state.logic_state
+
+    if logic == nil or Logic.current_turn(logic) != player_id do
+      state
+    else
+      case Logic.next_playable_card(logic, player_id) do
+        nil -> draw_until_playable(state, player_id)
+        card -> auto_play_card(state, player_id, [to_played_card(card)])
+      end
+    end
+  end
 
   # UNO call grace period expiring
   defp expire_uno_call_buffer(state, _player_id, _sequence_number), do: state
@@ -187,7 +199,11 @@ defmodule Uno.Game.Server do
 
   @impl true
   def handle_info({:auto_play, player_id}, state) do
-    {:noreply, handle_auto_play(state, player_id)}
+    if MapSet.member?(state.auto_play_set, player_id) do
+      {:noreply, handle_auto_play(state, player_id)}
+    else
+      {:noreply, state}
+    end
   end
 
   @impl true
@@ -231,6 +247,66 @@ defmodule Uno.Game.Server do
 
     state
   end
+
+  # GS-15: Draws one card at a time until the drawn card is playable, then plays it.
+  @spec draw_until_playable(map(), Logic.player_id()) :: map()
+  defp draw_until_playable(state, player_id) do
+    {:ok, new_logic, playable?} = Logic.draw_card(state.logic_state, player_id)
+    new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+    drawn_card = hd(new_hand)
+    new_state = %{state | logic_state: new_logic}
+    new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
+
+    if playable? do
+      card = Logic.next_playable_card(new_logic, player_id) |> to_played_card()
+      auto_play_card(new_state, player_id, [card])
+    else
+      draw_until_playable(new_state, player_id)
+    end
+  end
+
+  # GS-15: Executes a play on behalf of the auto-play player and broadcasts results.
+  @spec auto_play_card(map(), Logic.player_id(), [Logic.played_card()]) :: map()
+  defp auto_play_card(state, player_id, cards) do
+    old_logic = state.logic_state
+
+    case Logic.play_cards(old_logic, player_id, cards) do
+      {:ok, new_logic} ->
+        player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
+        new_state = broadcast_cards_played(new_state, player_id, cards, player_hand)
+
+        if Enum.empty?(player_hand) do
+          enqueue_broadcast(new_state, %Events.GameEnded{winner_id: player_id})
+        else
+          skip_count = count_skips(cards)
+          new_state = apply_skips(old_logic, new_state, skip_count)
+          new_state = broadcast_next_turn(new_state, false)
+          start_inactivity_timer(new_state)
+        end
+
+      {:error, _reason} ->
+        state
+    end
+  end
+
+  # Enqueues the cards_drawn event with the player's updated hand as a frequency map.
+  @spec broadcast_cards_drawn(map(), Logic.player_id(), [Logic.hand_card()], [
+          Logic.hand_card()
+        ]) :: map()
+  defp broadcast_cards_drawn(state, player_id, drawn_cards, hand) do
+    enqueue_broadcast(state, %Events.CardsDrawn{
+      player_id: player_id,
+      drawn_cards: drawn_cards,
+      hand: Enum.frequencies(hand)
+    })
+  end
+
+  # Converts a hand_card to a played_card, picking :red for wilds.
+  @spec to_played_card(Logic.hand_card()) :: Logic.played_card()
+  defp to_played_card(:wild), do: {:wild, :red}
+  defp to_played_card(:wild_draw_4), do: {:wild_draw_4, :red}
+  defp to_played_card(card), do: card
 
   # Builds a full-state Sync event from the current logic state.
   @spec build_sync(map()) :: Events.Sync.t()
