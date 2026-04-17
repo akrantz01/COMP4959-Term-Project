@@ -181,16 +181,25 @@ defmodule Uno.Room do
   end
 
   @impl true
-  def handle_call({:start, _player_id}, _from, %{state: :in_game} = _state) do
-    # TODO: Implement start game when room already in game handler
+  def handle_call({:start, _player_id}, _from, %{state: :in_game} = state) do
+    {:reply, {:error, :room_not_in_lobby}, state}
   end
 
-  def handle_call({:start, _player_id}, _from, %{admin_id: _admin_id} = _state) do
-    # TODO: Implement start game when caller not admin handler
+  def handle_call({:start, player_id}, _from, %{admin_id: admin_id} = state)
+      when player_id != admin_id do
+    {:reply, {:error, :not_room_admin}, state}
   end
 
-  def handle_call({:start, _player_id}, _from, _state) do
-    # TODO: Implement start game when caller is admin handler
+  def handle_call({:start, _player_id}, _from, state) do
+    connected_count =
+      state.players
+      |> Enum.count(fn {_id, player} -> player.connected end)
+
+    if connected_count < 2 do
+      {:reply, {:error, :not_enough_players}, state}
+    else
+      {:reply, :ok, state}
+    end
   end
 
   defp random_player_name do
