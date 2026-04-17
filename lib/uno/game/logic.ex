@@ -150,8 +150,9 @@ defmodule Uno.Game.Logic do
     end)
   end
 
-  #GL-7
-  @spec play_cards(t(), player_id(), played_card()) :: {:ok, t()} | {:error, :not_your_turn | :card_not_in_hand | :card_not_playable}
+  # GL-7
+  @spec play_cards(t(), player_id(), played_card()) ::
+          {:ok, t()} | {:error, :not_your_turn | :card_not_in_hand | :card_not_playable}
   def play_cards(game, player_id, played_card) do
     with :ok <- check_turn(game, player_id),
          :ok <- check_in_hand(game, player_id, played_card),
@@ -185,9 +186,8 @@ defmodule Uno.Game.Logic do
     if playable_card?(hand_card, top_card), do: :ok, else: {:error, :card_not_playable}
   end
 
-
-# Converts a played_card() back to a hand_card() for hand lookup and playability checks.
-# e.g. {:wild, :red} -> :wild | {:red, 5} -> {:red, 5}
+  # Converts a played_card() back to a hand_card() for hand lookup and playability checks.
+  # e.g. {:wild, :red} -> :wild | {:red, 5} -> {:red, 5}
   @spec to_hand_card(played_card()) :: hand_card()
   defp to_hand_card({wild, _colour}) when wild in [:wild, :wild_draw_4], do: wild
   defp to_hand_card(card), do: card
@@ -216,8 +216,6 @@ defmodule Uno.Game.Logic do
 
     %{game | players: new_players}
   end
-
-
 
   # GL-8 (Helper function to flip direction)
   @spec apply_reverse(direction(), [played_card()]) :: {direction(), boolean()}
