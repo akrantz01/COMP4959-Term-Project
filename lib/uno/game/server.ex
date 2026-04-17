@@ -195,27 +195,35 @@ defmodule Uno.Game.Server do
         {:reply, {:error, :game_not_started}, state}
 
       logic ->
-        vulnerable_player_id = logic.vulnerable_player_id
+        handle_uno_call(state, player_id, logic)
+    end
+  end
 
-        if vulnerable_player_id != nil and vulnerable_player_id != player_id do
-          case Map.get(state.vulnerable_players, vulnerable_player_id) do
-            vulnerable_timestamp when is_integer(vulnerable_timestamp) ->
-              current_time = System.monotonic_time(:millisecond)
-              delay = vulnerable_timestamp + @uno_grace_period - current_time
+  defp handle_uno_call(state, player_id, logic) do
+    vulnerable_player_id = logic.vulnerable_player_id
 
-              if delay > 0 do
-                Process.send_after(self(), {:uno_call_buffer, player_id, logic.sequence}, delay)
-                {:reply, :ok, state}
-              else
-                process_uno_call(state, player_id)
-              end
+    if vulnerable_player_id != nil and vulnerable_player_id != player_id do
+      handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id)
+    else
+      process_uno_call(state, player_id)
+    end
+  end
 
-            _ ->
-              process_uno_call(state, player_id)
-          end
+  defp handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id) do
+    case Map.get(state.vulnerable_players, vulnerable_player_id) do
+      vulnerable_timestamp when is_integer(vulnerable_timestamp) ->
+        current_time = System.monotonic_time(:millisecond)
+        delay = vulnerable_timestamp + @uno_grace_period - current_time
+
+        if delay > 0 do
+          Process.send_after(self(), {:uno_call_buffer, player_id, logic.sequence}, delay)
+          {:reply, :ok, state}
         else
           process_uno_call(state, player_id)
         end
+
+      _ ->
+        process_uno_call(state, player_id)
     end
   end
 
@@ -258,15 +266,7 @@ defmodule Uno.Game.Server do
         {:noreply, state}
 
       logic ->
-        vulnerable_player = logic.vulnerable_player_id
-
-        if logic.sequence == sequence_number and vulnerable_player != nil do
-          case process_uno_call(state, player_id) do
-            {:reply, _response, new_state} -> {:noreply, new_state}
-          end
-        else
-          {:noreply, state}
-        end
+        handle_uno_call_buffer(state, player_id, logic, sequence_number)
     end
   end
 
@@ -288,6 +288,18 @@ defmodule Uno.Game.Server do
   def handle_info(_msg, state), do: {:noreply, state}
 
   # -------------------- Private Helpers --------------------
+
+  defp handle_uno_call_buffer(state, player_id, logic, sequence_number) do
+    vulnerable_player = logic.vulnerable_player_id
+
+    if logic.sequence == sequence_number and vulnerable_player != nil do
+      case process_uno_call(state, player_id) do
+        {:reply, _response, new_state} -> {:noreply, new_state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
 
   # GS-14: Schedules an inactivity timeout for the current player if they are not in auto_play_set.
   # The sequence number is embedded so stale timer fires are no-ops in inactivity_timeout/3.
