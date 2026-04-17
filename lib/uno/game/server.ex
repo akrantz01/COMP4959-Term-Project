@@ -8,6 +8,7 @@ defmodule Uno.Game.Server do
   """
 
   alias Phoenix.PubSub
+  alias Uno.Game.Logic
 
   @doc """
   Starts the GenServer with the given room ID and player list.
@@ -106,8 +107,21 @@ defmodule Uno.Game.Server do
   end
 
   @impl true
-  def handle_call({:draw, _player_id}, _from, state) do
-    {:reply, :ok, state}
+  def handle_call({:draw, player_id}, _from, state) do
+    case draw_loop(state.logic_state, player_id, []) do
+      {:ok, updated_logic, drawn_cards} ->
+        # Broadcast events for each drawn card
+        Enum.each(drawn_cards, fn card ->
+          PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:card_drawn, player_id, card})
+        end)
+
+        updated_state = %{state | logic_state: updated_logic}
+
+        {:reply, {:ok, drawn_cards}, updated_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   @impl true
@@ -133,5 +147,20 @@ defmodule Uno.Game.Server do
   @impl true
   def handle_info({:uno_call_buffer, player_id, sequence_number}, state) do
     {:noreply, expire_uno_call_buffer(state, player_id, sequence_number)}
+  end
+
+  # -------------------- Private Helpers --------------------
+
+  defp draw_loop(logic_state, player_id, cards_drawn) do
+    case Logic.draw_card(logic_state, player_id) do
+      {:ok, updated_logic, drawn_card, :playable} ->
+        {:ok, updated_logic, cards_drawn ++ [drawn_card]}
+
+      {:ok, updated_logic, drawn_card, _status} ->
+        draw_loop(updated_logic, player_id, cards_drawn ++ [drawn_card])
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 end

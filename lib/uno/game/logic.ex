@@ -349,4 +349,13 @@ defmodule Uno.Game.Logic do
         false
     end
   end
+  # TODO: Temp stub just to let server compile
+  @spec draw_card(t(), player_id()) :: {:ok, t(), hand_card(), :playable | :penalty_continue | :penalty_complete | :unplayable} | {:error, atom()}
+  def draw_card(game, player_id) do
+    if player_id do
+      {:ok, game, {:red, 0}, :playable}
+    else
+      {:error, :invalid_player_id}
+    end
+  end
 end
