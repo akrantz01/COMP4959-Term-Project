@@ -55,6 +55,20 @@ defmodule Uno.Events do
           }
   end
 
+  defmodule AdminChanged do
+    @moduledoc """
+    Added by Aarshdeep Vandal:
+    The room has re-assigned the admin status to a new player
+    """
+
+    @enforce_keys[:new_admin_id]
+    defstruct [:new_admin_id]
+
+    @type t :: %__MODULE__{
+            new_admin_id: String.t() | nil
+          }
+  end
+
   defmodule GameStarted do
     @moduledoc """
     The game was started by the room admin

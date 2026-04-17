@@ -15,6 +15,7 @@ defmodule Uno.Room do
 
   use GenServer
 
+  alias Mix.PubSub
   alias Uno.Events, as: Events
   alias Uno.PubSub
 
@@ -166,6 +167,13 @@ defmodule Uno.Room do
 
         left_event = %Events.PlayerLeft{player_id: player_id}
         :ok = PubSub.broadcast({:room, state.room_id}, left_event)
+
+        # Added by Aarshdeep Vandal: Created a AdminChanged event in events.ex. Calling that event here
+        # so the frontend gets a broadcast that the room re-assigned the admin status to a new connected player
+        if state.admin_id != next_admin_id do
+          admin_change_event = %Events.AdminChanged{new_admin_id: next_admin_id}
+          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
+        end
 
         {:reply, {:ok, left_event}, next_state}
     end
