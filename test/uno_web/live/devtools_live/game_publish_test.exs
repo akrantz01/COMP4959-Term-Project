@@ -19,6 +19,7 @@ defmodule UnoWeb.DevtoolsLive.GamePublishTest do
 
     assert_receive %Events.Sync{
       sequence: 1,
+      current_player_id: "p1",
       top_card: {:red, 5},
       direction: :ltr,
       players: [{"p1", "Alice"}],
@@ -37,6 +38,7 @@ defmodule UnoWeb.DevtoolsLive.GamePublishTest do
 
     assert_receive %Events.Sync{
       sequence: 2,
+      current_player_id: "p1",
       top_card: {:green, :reverse},
       direction: :rtl,
       players: [{"p1", "Alice"}, {"p2", "Bob"}],
