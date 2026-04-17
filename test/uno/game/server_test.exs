@@ -18,7 +18,8 @@ defmodule Uno.Game.ServerTest do
 
     logic = %{
       logic
-      | hands: Map.put(logic.hands, current, [{:red, 5}, {:red, 0}, :wild, {:blue, 3}, {:green, 3}]),
+      | hands:
+          Map.put(logic.hands, current, [{:red, 5}, {:red, 0}, :wild, {:blue, 3}, {:green, 3}]),
         top_card: {:red, 3}
     }
 
