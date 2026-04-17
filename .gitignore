@@ -28,6 +28,7 @@ test_gs4.exs
 test_gs11.exs
 test_gs12.exs
 test_gs13.exs
+test_gs14.exs
 test/uno/game/server_test.exs
 test/uno/game/server_gs4_test.exs
 

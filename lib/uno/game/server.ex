@@ -13,6 +13,7 @@ defmodule Uno.Game.Server do
 
   @broadcast_delay 200
   @disconnect_timeout 60_000
+  @inactivity_timeout 30_000
 
   @doc """
   Starts the GenServer with the given room ID and player list.
@@ -67,8 +68,20 @@ defmodule Uno.Game.Server do
 
   # -------------------- Event Handlers --------------------
 
-  # Handles the inactivity timer expiring for a player's turn
-  defp inactivity_timeout(state, _player_id, _sequence_number), do: state
+  # GS-14: Fires when a player's 30s inactivity timer expires.
+  # Sequence number guards against stale timers — if the turn has advanced, this is a no-op.
+  # Only acts if the player is still the current player and the sequence matches.
+  defp inactivity_timeout(state, player_id, sequence_number) do
+    logic = state.logic_state
+
+    if logic != nil and
+         logic.sequence == sequence_number and
+         Logic.current_turn(logic) == player_id do
+      handle_auto_play(state, player_id)
+    else
+      state
+    end
+  end
 
   # Handles auto-play for a disconnected player
   defp handle_auto_play(state, _player_id), do: state
@@ -143,6 +156,7 @@ defmodule Uno.Game.Server do
           skip_count = count_skips(cards)
           new_state = apply_skips(old_logic, new_state, skip_count)
           new_state = broadcast_next_turn(new_state, false)
+          new_state = start_inactivity_timer(new_state)
           {:reply, :ok, new_state}
         end
 
@@ -199,6 +213,24 @@ defmodule Uno.Game.Server do
   def handle_info(_msg, state), do: {:noreply, state}
 
   # -------------------- Private Helpers --------------------
+
+  # GS-14: Schedules an inactivity timeout for the current player if they are not in auto_play_set.
+  # The sequence number is embedded so stale timer fires are no-ops in inactivity_timeout/3.
+  @spec start_inactivity_timer(map()) :: map()
+  defp start_inactivity_timer(state) do
+    logic = state.logic_state
+    player_id = Logic.current_turn(logic)
+
+    unless MapSet.member?(state.auto_play_set, player_id) do
+      Process.send_after(
+        self(),
+        {:inactivity_timeout, player_id, logic.sequence},
+        @inactivity_timeout
+      )
+    end
+
+    state
+  end
 
   # Builds a full-state Sync event from the current logic state.
   @spec build_sync(map()) :: Events.Sync.t()
