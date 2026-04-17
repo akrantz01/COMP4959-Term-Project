@@ -22,9 +22,9 @@ defmodule Uno.Game.Logic do
           players: :queue.queue(player()),
           top_card: played_card() | nil,
           direction: direction(),
+          chain: chain() | nil,
           penalties: penalties(),
-          vulnerable_player_id: player_id() | nil,
-          chain: chain() | nil
+          vulnerable_player_id: player_id() | nil
         }
 
   defstruct sequence: 0,
@@ -33,9 +33,9 @@ defmodule Uno.Game.Logic do
             players: :queue.new(),
             top_card: nil,
             direction: :ltr,
+            chain: nil,
             penalties: %{},
-            vulnerable_player_id: nil,
-            chain: nil
+            vulnerable_player_id: nil
 
   # task 1
   @spec generate_deck() :: [hand_card()]
@@ -158,18 +158,32 @@ defmodule Uno.Game.Logic do
   end
 
   # GL-7
-  @spec play_cards(t(), player_id(), played_card()) ::
-          {:ok, t()} | {:error, :not_your_turn | :card_not_in_hand | :card_not_playable}
-  def play_cards(game, player_id, played_card) do
+  @spec play_cards(t(), player_id(), [played_card()]) ::
+          {:ok, t()}
+          | {:error,
+             :not_your_turn
+             | :card_not_in_hand
+             | :card_not_playable
+             | :invalid_multi_play
+             | :mixed_chain}
+  def play_cards(game, player_id, played_cards) do
     with :ok <- check_turn(game, player_id),
-         :ok <- check_in_hand(game, player_id, played_card),
-         :ok <- check_playable(played_card, game.top_card) do
+         :ok <- check_multi_play(played_cards),
+         :ok <- check_all_in_hand(game, player_id, played_cards),
+         :ok <- check_first_playable(played_cards, game.top_card),
+         :ok <- check_chain_play(game.chain, played_cards),
+         {:ok, new_chain} <- apply_chain(game.chain, played_cards) do
+      {new_direction, _direction_changed?} = apply_reverse(game.direction, played_cards)
+      skip_count = apply_skip(played_cards)
+
       game =
         game
-        |> remove_from_hand(player_id, played_card)
-        |> Map.put(:top_card, played_card)
+        |> remove_all_from_hand(player_id, played_cards)
+        |> Map.put(:top_card, List.last(played_cards))
+        |> Map.put(:direction, new_direction)
+        |> Map.put(:chain, new_chain)
         |> Map.put(:sequence, game.sequence + 1)
-        |> advance_turn()
+        |> advance_turn_steps(1 + skip_count)
 
       {:ok, game}
     end
@@ -180,17 +194,67 @@ defmodule Uno.Game.Logic do
     if current_turn(game) == player_id, do: :ok, else: {:error, :not_your_turn}
   end
 
-  @spec check_in_hand(t(), player_id(), played_card()) :: :ok | {:error, :card_not_in_hand}
-  defp check_in_hand(%__MODULE__{hands: hands}, player_id, played_card) do
-    hand_card = to_hand_card(played_card)
-    in_hand? = hands |> Map.get(player_id, []) |> Enum.member?(hand_card)
-    if in_hand?, do: :ok, else: {:error, :card_not_in_hand}
+  @spec check_multi_play([played_card()]) :: :ok | {:error, :invalid_multi_play}
+  defp check_multi_play([_single_card]), do: :ok
+
+  defp check_multi_play(played_cards) do
+    if valid_multi_play?(played_cards), do: :ok, else: {:error, :invalid_multi_play}
   end
 
-  @spec check_playable(played_card(), played_card() | nil) :: :ok | {:error, :card_not_playable}
-  defp check_playable(played_card, top_card) do
+@spec check_all_in_hand(t(), player_id(), [played_card()]) :: :ok | {:error, :card_not_in_hand}
+defp check_all_in_hand(%__MODULE__{hands: hands}, player_id, played_cards) do
+  hand = Map.get(hands, player_id, [])
+
+  played_cards
+  |> Enum.reduce_while(hand, fn played_card, remaining_hand ->
     hand_card = to_hand_card(played_card)
-    if playable_card?(hand_card, top_card), do: :ok, else: {:error, :card_not_playable}
+
+    case Enum.member?(remaining_hand, hand_card) do
+      true -> {:cont, List.delete(remaining_hand, hand_card)}
+      false -> {:halt, :missing}
+    end
+  end)
+  |> case do
+    :missing -> {:error, :card_not_in_hand}
+    _remaining_hand -> :ok
+  end
+end
+
+  @spec check_first_playable([played_card()], played_card() | nil) ::
+          :ok | {:error, :card_not_playable}
+  defp check_first_playable([first_card | _rest], top_card) do
+    hand_card = to_hand_card(first_card)
+
+    if playable_card?(hand_card, top_card) do
+      :ok
+    else
+      {:error, :card_not_playable}
+    end
+  end
+
+  @spec check_chain_play(chain() | nil, [played_card()]) :: :ok | {:error, :card_not_playable}
+  defp check_chain_play(nil, _played_cards), do: :ok
+
+  defp check_chain_play(%{type: :draw_2}, played_cards) do
+    valid_draw_2_stack? =
+      valid_multi_play?(played_cards) and
+        Enum.all?(played_cards, fn
+          {_colour, :draw_2} -> true
+          _ -> false
+        end)
+
+    if valid_draw_2_stack?, do: :ok, else: {:error, :card_not_playable}
+  end
+
+  defp check_chain_play(%{type: :wild_draw_4}, played_cards) do
+    valid_wild_draw_4_stack? =
+      valid_multi_play?(played_cards) and
+        Enum.all?(played_cards, fn
+          {:wild_draw_4, _colour} -> true
+          _ -> false
+        end)
+
+    if valid_wild_draw_4_stack?, do: :ok, else: {:error, :card_not_playable}
   end
 
   # Converts a played_card() back to a hand_card() for hand lookup and playability checks.
@@ -199,14 +263,12 @@ defmodule Uno.Game.Logic do
   defp to_hand_card({wild, _colour}) when wild in [:wild, :wild_draw_4], do: wild
   defp to_hand_card(card), do: card
 
-  @spec remove_from_hand(t(), player_id(), played_card()) :: t()
-  defp remove_from_hand(game, player_id, played_card) do
-    hand_card = to_hand_card(played_card)
-
+  @spec remove_all_from_hand(t(), player_id(), [played_card()]) :: t()
+  defp remove_all_from_hand(game, player_id, played_cards) do
     updated_hand =
-      game.hands
-      |> Map.get(player_id, [])
-      |> List.delete(hand_card)
+      Enum.reduce(played_cards, Map.get(game.hands, player_id, []), fn played_card, hand ->
+        List.delete(hand, to_hand_card(played_card))
+      end)
 
     %{game | hands: Map.put(game.hands, player_id, updated_hand)}
   end
@@ -222,6 +284,13 @@ defmodule Uno.Game.Logic do
       end
 
     %{game | players: new_players}
+  end
+
+  @spec advance_turn_steps(t(), non_neg_integer()) :: t()
+  defp advance_turn_steps(game, 0), do: game
+
+  defp advance_turn_steps(game, steps) do
+    Enum.reduce(1..steps, game, fn _, acc -> advance_turn(acc) end)
   end
 
   # GL-8 (Helper function to flip direction)
