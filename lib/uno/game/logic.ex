@@ -189,11 +189,16 @@ defmodule Uno.Game.Logic do
     end
   end
 
+  # Checks whether the caller is the current player whose turn it is.
+  # Returns :ok if yes, otherwise returns an error tuple.
   @spec check_turn(t(), player_id()) :: :ok | {:error, :not_your_turn}
   defp check_turn(game, player_id) do
     if current_turn(game) == player_id, do: :ok, else: {:error, :not_your_turn}
   end
 
+  # Validates whether the played stack is legal as a multi-card play.
+  # A single card is always valid here.
+  # Multiple cards must pass valid_multi_play?/1.
   @spec check_multi_play([played_card()]) :: :ok | {:error, :invalid_multi_play}
   defp check_multi_play([]), do: {:error, :invalid_multi_play}
   defp check_multi_play([_single_card]), do: :ok
@@ -202,6 +207,13 @@ defmodule Uno.Game.Logic do
     if valid_multi_play?(played_cards), do: :ok, else: {:error, :invalid_multi_play}
   end
 
+  # Verifies that every played card actually exists in the player's hand.
+  # Cards are checked one by one against a temporary remaining-hand copy,
+  # so duplicates are handled correctly.
+  #
+  # Example:
+  # If the hand has only one {:red, 5}, then trying to play two {:red, 5}
+  # cards should fail.
   @spec check_all_in_hand(t(), player_id(), [played_card()]) :: :ok | {:error, :card_not_in_hand}
   defp check_all_in_hand(%__MODULE__{hands: hands}, player_id, played_cards) do
     hand = Map.get(hands, player_id, [])
@@ -221,6 +233,11 @@ defmodule Uno.Game.Logic do
     end
   end
 
+  # Checks whether the first played card can legally be placed on top of the
+  # current discard pile card.
+  #
+  # For multi-card plays, only the first card needs to match the current top
+  # card directly; the rest are validated against each other by GL-11.
   @spec check_first_playable([played_card()], played_card() | nil) ::
           :ok | {:error, :card_not_playable}
   defp check_first_playable([first_card | _rest], top_card) do
@@ -233,6 +250,7 @@ defmodule Uno.Game.Logic do
     end
   end
 
+  # Validates plays when a draw-chain is already active.
   @spec check_chain_play(chain() | nil, [played_card()]) :: :ok | {:error, :card_not_playable}
   defp check_chain_play(nil, _played_cards), do: :ok
 
@@ -264,6 +282,8 @@ defmodule Uno.Game.Logic do
   defp to_hand_card({wild, _colour}) when wild in [:wild, :wild_draw_4], do: wild
   defp to_hand_card(card), do: card
 
+  # Removes all played cards from the player's hand.
+  # Each card is removed one at a time so repeated cards are handled properly.
   @spec remove_all_from_hand(t(), player_id(), [played_card()]) :: t()
   defp remove_all_from_hand(game, player_id, played_cards) do
     updated_hand =
@@ -274,6 +294,7 @@ defmodule Uno.Game.Logic do
     %{game | hands: Map.put(game.hands, player_id, updated_hand)}
   end
 
+  # Advances the turn by one player, based on the current direction.
   @spec advance_turn(t()) :: t()
   defp advance_turn(%__MODULE__{players: players, direction: direction} = game) do
     {{:value, current}, rest} = :queue.out(players)
@@ -287,6 +308,7 @@ defmodule Uno.Game.Logic do
     %{game | players: new_players}
   end
 
+  # This is used to apply skip effects by moving past additional players.
   @spec advance_turn_steps(t(), non_neg_integer()) :: t()
   defp advance_turn_steps(game, 0), do: game
 
