@@ -129,6 +129,20 @@ defmodule Uno.Room do
   # Implementation
 
   @impl true
+  def handle_call({:join, player_id}, _from, %{state: :in_game} = state) do
+    case Map.fetch(state.players, player_id) do
+      {:ok, player} ->
+        updated_players = Map.put(state.players, player_id, %{player | connected: true})
+        next_state = %{state | players: updated_players}
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
+
+        {:reply, {:ok, joined_event}, next_state}
+
+      :error ->
+        {:reply, {:error, :room_in_game}, state}
+    end
+  end
+
   def handle_call({:join, player_id}, _from, state) do
     case Map.fetch(state.players, player_id) do
       {:ok, player} ->
