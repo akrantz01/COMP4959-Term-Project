@@ -109,17 +109,33 @@
       >
         <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
           <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
+            <% {card_colour, card_type} = card_parts(card) %>
+            <% selected? = card_selected?(@selected_cards, card, i) %>
+            <% is_wild = card_type in [:wild, :wild_draw_4] %>
+            <% effective_colour =
+              if is_wild, do: selected_wild_colour(@selected_cards, card, i), else: card_colour %>
             <div>
-              <% {card_colour, card_type} = card_parts(card) %>
               <.uno_card
                 card={card}
                 disabled={!my_turn}
-                phx-click="toggle-card"
+                phx-click={
+                  if is_wild and not selected? do
+                    JS.set_attribute({"phx-value-type", to_string(card_type)},
+                      to: "#wild-colour-picker button"
+                    )
+                    |> JS.set_attribute({"phx-value-index", to_string(i)},
+                      to: "#wild-colour-picker button"
+                    )
+                    |> JS.show(to: "#wild-colour-picker", display: "flex")
+                  else
+                    "toggle-card"
+                  end
+                }
                 phx-target={@myself}
-                phx-value-colour={card_colour}
+                phx-value-colour={effective_colour}
                 phx-value-type={card_type}
                 phx-value-index={i}
-                class={Enum.member?(@selected_cards, {card, i}) && "-translate-y-4 scale-103"}
+                class={selected? && "-translate-y-4 scale-103"}
               />
             </div>
           <% end %>
@@ -150,5 +166,39 @@
         },
       };
     </script>
+  </div>
+
+  <div
+    id="wild-colour-picker"
+    class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60"
+  >
+    <button
+      type="button"
+      class="absolute inset-0 w-full h-full cursor-default"
+      aria-label="Cancel colour selection"
+      phx-click={JS.hide(to: "#wild-colour-picker")}
+    />
+    <div class="relative bg-base-100 rounded-lg p-6 shadow-xl w-fit">
+      <h3 class="text-lg font-semibold mb-4 text-center">Choose a colour</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <button
+          :for={
+            {colour, classes} <- [
+              {"red", "bg-red-500 hover:bg-red-600"},
+              {"yellow", "bg-yellow-400 hover:bg-yellow-500"},
+              {"green", "bg-green-500 hover:bg-green-600"},
+              {"blue", "bg-blue-500 hover:bg-blue-600"}
+            ]
+          }
+          type="button"
+          phx-value-colour={colour}
+          phx-click={JS.push("toggle-card") |> JS.hide(to: "#wild-colour-picker")}
+          phx-target={@myself}
+          class={["btn h-16 w-24 text-white capitalize border-none", classes]}
+        >
+          {colour}
+        </button>
+      </div>
+    </div>
   </div>
 </div>
