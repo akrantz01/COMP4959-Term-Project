@@ -154,6 +154,7 @@
         class="max-w-full min-h-50 overflow-x-auto"
       >
         <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
+          <% chain_active = !is_nil(@chain) %>
           <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
             <% {card_colour, card_type} = card_parts(card) %>
             <% selected? = card_selected?(@selected_cards, card, i) %>
@@ -163,7 +164,7 @@
             <div>
               <.uno_card
                 card={card}
-                disabled={!my_turn}
+                disabled={!my_turn or (chain_active and card_type != @chain.type)}
                 phx-click={
                   if is_wild and not selected? do
                     JS.set_attribute({"phx-value-type", to_string(card_type)},
