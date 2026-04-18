@@ -185,6 +185,7 @@ defmodule Uno.Game.Logic do
         |> Map.put(:chain, new_chain)
         |> Map.put(:sequence, game.sequence + 1)
         |> advance_turn_steps(1 + skip_count)
+        |> Map.put(:vulnerable_player_id, nil)
 
       {:ok, game}
     end
