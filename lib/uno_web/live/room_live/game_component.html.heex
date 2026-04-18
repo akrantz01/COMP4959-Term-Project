@@ -96,7 +96,7 @@
     <% my_turn = @player_id == @turn_player_id && not @turn_skipped %>
     <section class="relative max-w-full overflow-x-auto">
       <div class="flex justify-evenly items-center px-6 max-w-full">
-        <p>Cards: {Map.values(@hand) |> Enum.sum()}</p>
+        <p>Cards: {hand_size(@hand)}</p>
         <div>
           <.button variant="primary" disabled={!my_turn} phx-click="play" phx-target={@myself}>
             Play

@@ -170,7 +170,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
            %{
              id: id,
              name: name,
-             cards: Map.get(event.hands, id, %{}) |> Map.values() |> Enum.sum()
+             cards: Map.get(event.hands, id, %{}) |> hand_size()
            }
          end),
        top_card: event.top_card,
@@ -207,13 +207,15 @@ defmodule UnoWeb.RoomLive.GameComponent do
         socket,
         :opponents,
         List.update_at(opponents, index, fn item ->
-          Map.put(item, :cards, Map.values(hand) |> Enum.sum())
+          Map.put(item, :cards, hand_size(hand))
         end)
       )
     else
       socket
     end
   end
+
+  defp hand_size(hand), do: Map.values(hand) |> Enum.sum()
 
   defp enqueue_card_animation(
          %{
