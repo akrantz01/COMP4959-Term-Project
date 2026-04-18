@@ -13,7 +13,7 @@ defmodule Uno.Room do
   - `games_played`: Number of completed games in this room.
   """
 
-  use GenServer
+  use GenServer, restart: :transient
 
   alias Uno.Events, as: Events
   alias Uno.PubSub
@@ -36,7 +36,7 @@ defmodule Uno.Room do
     admin_id: nil,
     last_winner_id: nil,
     games_played: 0,
-    shutdown_timer: nil
+    shutdown_timer: nil,
     game_pid: nil,
     game_ref: nil
   ]
@@ -51,7 +51,7 @@ defmodule Uno.Room do
           admin_id: String.t() | nil,
           last_winner_id: String.t() | nil,
           games_played: non_neg_integer(),
-          shutdown_timer: reference() | nil
+          shutdown_timer: reference() | nil,
           game_pid: pid() | nil,
           game_ref: reference() | nil
         }
