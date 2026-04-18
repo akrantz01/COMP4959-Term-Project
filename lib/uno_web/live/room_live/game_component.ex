@@ -78,10 +78,14 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "draw",
         _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id}} = socket
+        %{assigns: %{player_id: player_id, turn_player_id: player_id, hand: hand}} = socket
       ) do
-    # TODO: call game to draw card(s)
-    {:noreply, socket}
+    if hand_size(hand) > 20 do
+      # TODO: call game to draw card(s)
+      {:noreply, socket}
+    else
+      {:noreply, put_flash(socket, :error, "You have too many cards!")}
+    end
   end
 
   def handle_event("draw", _unsigned_params, socket),
