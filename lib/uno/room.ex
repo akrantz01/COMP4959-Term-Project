@@ -247,6 +247,10 @@ defmodule Uno.Room do
     {:noreply, next_state}
   end
 
+  def handle_info(:shutdown_timeout, state) do
+    {:stop, :normal, state}
+  end
+
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
   end
@@ -281,11 +285,6 @@ defmodule Uno.Room do
     players
     |> Map.keys()
     |> List.first()
-  end
-
-  @impl true
-  def handle_info(:shutdown_timeout, state) do
-    {:stop, :normal, state}
   end
 
   defp cancel_shutdown_timer(%{shutdown_timer: nil} = state), do: state
