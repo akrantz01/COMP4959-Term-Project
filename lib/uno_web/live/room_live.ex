@@ -1,5 +1,7 @@
 defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
+
+  alias Uno.{Events, PubSub}
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
@@ -7,8 +9,8 @@ defmodule UnoWeb.RoomLive do
     player_id = Map.get(session, "player_id") || Nanoid.generate()
 
     if connected?(socket) do
-      Uno.PubSub.subscribe({:room, room_id})
-      Uno.PubSub.subscribe({:game, room_id})
+      PubSub.subscribe({:room, room_id})
+      PubSub.subscribe({:game, room_id})
     end
 
     {:ok,
