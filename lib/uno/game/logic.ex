@@ -502,4 +502,31 @@ defmodule Uno.Game.Logic do
       {:ok, game, current_turn(game), game.penalties}
     end
   end
+
+  # GL-16
+  @spec uno(t(), player_id()) :: {:ok, t(), penalties()}
+  def uno(game, _player_id) do
+    current_player_id = current_turn(game)
+    vulnerable_player_id = game.vulnerable_player_id
+
+    penalized_player_id =
+      cond do
+        is_nil(vulnerable_player_id) -> current_player_id
+        vulnerable_player_id == current_player_id -> nil
+        true -> vulnerable_player_id
+      end
+
+    updated_penalties =
+      case penalized_player_id do
+        nil -> game.penalties
+        target_player_id -> Map.update(game.penalties, target_player_id, 1, &(&1 + 1))
+      end
+
+    updated_game =
+      game
+      |> Map.put(:penalties, updated_penalties)
+      |> Map.put(:vulnerable_player_id, nil)
+
+    {:ok, updated_game, updated_penalties}
+  end
 end
