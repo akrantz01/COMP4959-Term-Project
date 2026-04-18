@@ -149,6 +149,7 @@ defmodule Uno.Room do
         if state.game_pid != nil do
           Uno.Game.Server.connect(state.game_pid, player_id)
         end
+
         # end of code added by aarshdeep vandal (R-10)
 
         {:reply, {:ok, joined_event}, next_state}
@@ -205,6 +206,7 @@ defmodule Uno.Room do
         if state.state == :in_game and state.game_pid != nil do
           Uno.Game.Server.disconnect(state.game_pid, player_id)
         end
+
         # end of code added by aarshdeep vandal (R-10)
 
         {:reply, {:ok, left_event}, next_state}
@@ -261,6 +263,11 @@ defmodule Uno.Room do
     {:noreply, next_state}
   end
 
+  @impl true
+  def handle_info(:shutdown_timeout, state) do
+    {:stop, :normal, state}
+  end
+
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
   end
@@ -295,11 +302,6 @@ defmodule Uno.Room do
     players
     |> Map.keys()
     |> List.first()
-  end
-
-  @impl true
-  def handle_info(:shutdown_timeout, state) do
-    {:stop, :normal, state}
   end
 
   defp cancel_shutdown_timer(%{shutdown_timer: nil} = state), do: state
