@@ -19,7 +19,11 @@ defmodule Uno.Game.Server do
   Starts the GenServer with the given room ID and player list.
   """
   def start_link(room_id, player_ids) do
-    GenServer.start_link(__MODULE__, {room_id, player_ids})
+    GenServer.start_link(__MODULE__, {room_id, player_ids}, name: via_tuple(room_id))
+  end
+
+  defp via_tuple(room_id) do
+    {:via, Registry, {Uno.Game.Registry, room_id}}
   end
 
   # -------------------- APIs --------------------
