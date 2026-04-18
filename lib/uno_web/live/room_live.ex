@@ -18,13 +18,7 @@ defmodule UnoWeb.RoomLive do
        player_id: player_id,
        state: :lobby
      )
-     |> assign(
-       :room_form,
-       RoomForm.new(%{
-         player_id: player_id,
-         state: :lobby
-       })
-     )}
+     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
   end
 
   # --- Temporary, remove once more is implemented ---
