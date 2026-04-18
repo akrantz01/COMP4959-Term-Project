@@ -37,7 +37,7 @@
     </div>
   </section>
 
-  <section class="flex justify-evenly items-center">
+  <section class="relative flex justify-evenly items-center">
     <div :if={@top_card != nil}>
       <.uno_card size={:lg} selectable={false} card={@top_card} />
     </div>
@@ -53,30 +53,66 @@
         <:card><.flipped_card size={:lg} /></:card>
       </.card_stack>
     </div>
-  </section>
 
-  <section
-    id="hand-scroll"
-    phx-hook=".HandScroll"
-    class="max-w-full min-h-54 overflow-x-auto"
-  >
-    <% my_turn = @player_id == @turn_player_id %>
-    <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
-      <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
-        <div>
-          <% {card_colour, card_type} = card_parts(card) %>
-          <.uno_card
-            card={card}
-            disabled={!my_turn}
-            phx-click="toggle-card"
-            phx-target={@myself}
-            phx-value-colour={card_colour}
-            phx-value-type={card_type}
-            phx-value-index={i}
-            class={Enum.member?(@selected_cards, {card, i}) && "-translate-y-4 scale-103"}
-          />
+    <div
+      :if={@current_card_animation != nil}
+      id={"card-animation-#{@current_card_animation.id}"}
+      data-id={@current_card_animation.id}
+      phx-hook=".CardAnimation"
+      phx-target={@myself}
+      class="pointer-events-none absolute inset-x-0 z-10 bg-black/60 py-12 animate-[card-overlay-animation_1000ms_ease-in-out] [animation-fill-mode:forwards]"
+      style={card_animation_style(@current_card_animation, @player_id)}
+    >
+      <div class="flex flex-row flex-wrap gap-2 justify-center animate-[card-list-animation_1000ms_ease-in-out] [animation-fill-mode:forwards]">
+        <div :for={card <- @current_card_animation.cards}>
+          <%= if card == :hidden do %>
+            <.flipped_card />
+          <% else %>
+            <.uno_card card={card} selectable={false} />
+          <% end %>
         </div>
-      <% end %>
+      </div>
+    </div>
+  </section>
+  <script :type={Phoenix.LiveView.ColocatedHook} name=".CardAnimation">
+    export default {
+      mounted() {
+        const id = parseInt(this.el.dataset.id);
+        this.timeout = setTimeout(
+          () => this.pushEventTo(this.el, "dismiss_card_animation", { id }),
+          1000
+        );
+      },
+      destroyed() {
+        clearTimeout(this.timeout);
+      }
+    };
+  </script>
+
+  <section class="max-w-full overflow-x-auto">
+    <div
+      id="hand-scroll"
+      phx-hook=".HandScroll"
+      class="max-w-full min-h-50 overflow-x-auto"
+    >
+      <% my_turn = @player_id == @turn_player_id %>
+      <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
+        <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
+          <div>
+            <% {card_colour, card_type} = card_parts(card) %>
+            <.uno_card
+              card={card}
+              disabled={!my_turn}
+              phx-click="toggle-card"
+              phx-target={@myself}
+              phx-value-colour={card_colour}
+              phx-value-type={card_type}
+              phx-value-index={i}
+              class={Enum.member?(@selected_cards, {card, i}) && "-translate-y-4 scale-103"}
+            />
+          </div>
+        <% end %>
+      </div>
     </div>
   </section>
   <script :type={Phoenix.LiveView.ColocatedHook} name=".HandScroll">
