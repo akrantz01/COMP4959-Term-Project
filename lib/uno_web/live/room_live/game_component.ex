@@ -21,6 +21,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
          vulnerable_player_id: nil,
          chain: nil,
          selected_cards: [],
+         uno_called: false,
          current_card_animation: nil
        )
        |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())
@@ -98,6 +99,14 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event("draw", _unsigned_params, socket),
     do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
 
+  def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: false}} = socket) do
+    # TODO: call game to call UNO!
+    {:noreply, assign(socket, :uno_called, true)}
+  end
+
+  def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: true}} = socket),
+    do: {:noreply, put_flash(socket, :error, "Already called UNO! this turn!")}
+
   def handle_event(
         "dismiss_card_animation",
         %{"id" => id},
@@ -131,7 +140,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
        top_card: event.top_card,
        direction: event.direction,
        vulnerable_player_id: event.vulnerable_player_id,
-       chain: event.chain
+       chain: event.chain,
+       uno_called: false
      )}
   end
 

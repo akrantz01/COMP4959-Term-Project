@@ -110,6 +110,14 @@
             Draw
           </.button>
         </div>
+        <.button
+          class="btn btn-error"
+          disabled={@uno_called}
+          phx-click="uno"
+          phx-target={@myself}
+        >
+          UNO!
+        </.button>
       </div>
 
       <div
