@@ -90,13 +90,18 @@
     };
   </script>
 
+  <% my_turn = @player_id == @turn_player_id && not @turn_skipped %>
   <section class="relative max-w-full overflow-x-auto">
+    <div class="flex justify-evenly items-center px-6 max-w-full">
+      <p>Cards: {Map.values(@hand) |> Enum.sum()}</p>
+      <.button variant="primary" disabled={!my_turn} phx-click="play">Play</.button>
+    </div>
+
     <div
       id="hand-scroll"
       phx-hook=".HandScroll"
       class="max-w-full min-h-50 overflow-x-auto"
     >
-      <% my_turn = @player_id == @turn_player_id && not @turn_skipped %>
       <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
         <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
           <div>
