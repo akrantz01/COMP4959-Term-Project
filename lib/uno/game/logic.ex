@@ -449,7 +449,7 @@ defmodule Uno.Game.Logic do
     end
   end
 
-  # GL-12
+  # GL-12, 13
   @spec draw_card(t(), player_id()) :: {:ok, t(), boolean() | :continue | :complete}
   def draw_card(game, player_id) do
     game =
