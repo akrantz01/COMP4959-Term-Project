@@ -43,6 +43,38 @@ defmodule UnoWeb.RoomLive.GameComponent do
   end
 
   def handle_event(
+        "play",
+        _unsigned_params,
+        %{
+          assigns: %{
+            player_id: player_id,
+            turn_player_id: player_id,
+            selected_cards: []
+          }
+        } = socket
+      ),
+      do: {:noreply, put_flash(socket, :error, "No cards selected!")}
+
+  def handle_event(
+        "play",
+        _unsigned_params,
+        %{
+          assigns: %{
+            player_id: player_id,
+            turn_player_id: player_id,
+            selected_cards: selected_cards
+          }
+        } = socket
+      ) do
+    _selected_cards = Enum.map(selected_cards, fn {card, _} -> card end)
+    # TODO: call game to play card(s)
+    {:noreply, assign(socket, :selected_cards, [])}
+  end
+
+  def handle_event("play", _unsigned_params, socket),
+    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+
+  def handle_event(
         "dismiss_card_animation",
         %{"id" => id},
         %{
