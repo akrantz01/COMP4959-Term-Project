@@ -46,8 +46,24 @@
         <.uno_card size={:lg} selectable={false} card={@top_card} />
       </div>
 
-      <div>
+      <div class="flex flex-col justify-evenly items-center gap-y-4">
         <.direction_icon direction={@direction} />
+
+        <div :if={@chain != nil} class="card bg-neutral text-neutral-content ring-3 ring-red-500">
+          <div class="card-body">
+            <h3 class="card-title flex-grow text-lg">Chain Active!</h3>
+            <p>
+              <span class="font-semibold">Type:</span>
+              <%= case @chain.type do %>
+                <% :draw_2 -> %>
+                  Draw 2
+                <% :wild_draw_4 -> %>
+                  Wild Draw 4
+              <% end %>
+            </p>
+            <p><span class="font-semibold">Amount:</span> +{@chain.amount}</p>
+          </div>
+        </div>
       </div>
 
       <div>
