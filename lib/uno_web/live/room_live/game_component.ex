@@ -21,14 +21,17 @@ defmodule UnoWeb.RoomLive.GameComponent do
          selected_cards: []
        )}
 
-  def handle_event("toggle-card", params, socket) do
-    case SelectedCard.parse(params) do
-      {:ok, selected} ->
-        card = Card.format(:hand, selected.card)
-        indexed_card = {card, selected.index}
+  def handle_event("toggle-card", params, %{assigns: %{selected_cards: selected_cards}} = socket) do
+    with {:ok, selected} <- SelectedCard.parse(params),
+         card = Card.format(:hand, selected.card),
+         {:ok, new_cards} <- toggle_selected_card(selected_cards, {card, selected.index}) do
+      {:noreply, assign(socket, :selected_cards, new_cards)}
+    else
+      {:error, :different_type} ->
+        {:noreply, put_flash(socket, :error, "Selected cards must all be the same type")}
 
-        {:noreply,
-         update(socket, :selected_cards, fn cards -> toggle_selected_card(cards, indexed_card) end)}
+      {:error, :duplicate_colour} ->
+        {:noreply, put_flash(socket, :error, "Selected cards must each be a different colour")}
 
       _ ->
         {:noreply, socket}
@@ -83,12 +86,38 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   # --- Private UI helpers ---
 
-  defp toggle_selected_card(cards, selected)
-  defp toggle_selected_card([], selected), do: [selected]
-  defp toggle_selected_card([selected | rest], selected), do: rest
+  defp toggle_selected_card(selected_cards, {card, _} = indexed_card) do
+    {colour, type} = card_parts(card)
 
-  defp toggle_selected_card([card | rest], selected),
-    do: [card | toggle_selected_card(rest, selected)]
+    case toggle_selected_card(selected_cards, indexed_card, colour, type) do
+      {:added, rest} -> {:ok, [indexed_card | rest]}
+      {:removed, rest} -> {:ok, rest}
+      error -> error
+    end
+  end
+
+  defp toggle_selected_card([], _indexed_card, _colour, _type), do: {:added, []}
+
+  defp toggle_selected_card([indexed_card | rest], indexed_card, _colour, _type),
+    do: {:removed, rest}
+
+  defp toggle_selected_card([{head_card, _} = head | rest], indexed_card, colour, type) do
+    {head_colour, head_type} = card_parts(head_card)
+
+    cond do
+      type != head_type ->
+        {:error, :different_type}
+
+      colour != nil && colour == head_colour ->
+        {:error, :duplicate_colour}
+
+      true ->
+        with {tag, new_rest} when tag in [:added, :removed] <-
+               toggle_selected_card(rest, indexed_card, colour, type) do
+          {tag, [head | new_rest]}
+        end
+    end
+  end
 
   defp direction_icon(%{direction: direction} = assigns) do
     assigns =
