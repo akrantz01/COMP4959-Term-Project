@@ -131,6 +131,9 @@ defmodule Uno.Room do
   @impl true
   @spec init(Events.room_id()) :: {:ok, state()}
   def init(room_id) do
+    # Tell the Room to listen to all events broadcast by its Game process
+    Uno.PubSub.subscribe({:game, room_id})
+
     {:ok, %__MODULE__{room_id: room_id}}
   end
 
@@ -267,6 +270,35 @@ defmodule Uno.Room do
   def handle_info(:shutdown_timeout, state) do
     {:stop, :normal, state}
   end
+
+  # Added by Aarshdeep Vandal (R-11)
+  @impl true
+  def handle_info(%Events.GameEnded{winner_id: winner_id}, state) do
+    # 1. Update the winner's metadata (increment wins) safely
+    updated_players =
+      if winner_id != nil and Map.has_key?(state.players, winner_id) do
+        player = state.players[winner_id]
+        Map.put(state.players, winner_id, %{player | wins: player.wins + 1})
+      else
+        state.players
+      end
+
+    # 2. Update room stats and switch to lobby state
+    next_state = %{state |
+      players: updated_players,
+      last_winner_id: winner_id,
+      games_played: state.games_played + 1,
+      state: :lobby
+    }
+
+    {:noreply, next_state}
+  end
+
+  # Catch-all: Ignore all other Game PubSub events (CardsPlayed, NextTurn, etc.)
+  # so the Room doesn't crash when it receives them.
+  @impl true
+  def handle_info(_msg, state), do: {:noreply, state}
+  # end of code Added by Aarshdeep Vandal (R-11)
 
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
