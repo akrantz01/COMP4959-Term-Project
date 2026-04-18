@@ -94,14 +94,15 @@
     </script>
 
     <% my_turn = @player_id == @turn_player_id && not @turn_skipped %>
+    <% card_count = hand_size(@hand) %>
     <section class="relative max-w-full overflow-x-auto">
       <div class="flex justify-evenly items-center px-6 max-w-full">
-        <p>Cards: {hand_size(@hand)}</p>
+        <p>Cards: {card_count}</p>
         <div>
           <.button variant="primary" disabled={!my_turn} phx-click="play" phx-target={@myself}>
             Play
           </.button>
-          <.button disabled={!my_turn} phx-click="draw" phx-target={@myself}>
+          <.button disabled={!my_turn or card_count > 20} phx-click="draw" phx-target={@myself}>
             Draw
           </.button>
         </div>
