@@ -3,8 +3,8 @@ defmodule UnoWeb.RoomLive do
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
-  def mount(%{"room_id" => room_id}, _session, socket) do
-    player_id = socket.assigns[:player_id] || Nanoid.generate()
+  def mount(%{"room_id" => room_id}, session, socket) do
+    player_id = Map.get(session, "player_id") || Nanoid.generate()
 
     if connected?(socket) do
       Uno.PubSub.subscribe({:room, room_id})
@@ -17,7 +17,7 @@ defmodule UnoWeb.RoomLive do
        room_id: room_id,
        player_id: player_id,
        players: [],
-       status: :waiting
+       state: :lobby
      )
      |> assign(
        :room_form,
@@ -62,20 +62,20 @@ defmodule UnoWeb.RoomLive do
 
   ## HANDLE PUBSUB EVENTS
 
-  def handle_info({:player_joined, player_id}, socket) do
+  def handle_info(%Uno.Events.PlayerJoined{player_id: player_id, name: _name}, socket) do
     {:noreply, update(socket, :players, fn p -> Enum.uniq([player_id | p]) end)}
   end
 
-  def handle_info({:player_left, player_id}, socket) do
+  def handle_info(%Uno.Events.PlayerLeft{player_id: player_id}, socket) do
     {:noreply, update(socket, :players, fn p -> List.delete(p, player_id) end)}
   end
 
-  def handle_info({:game_started, _}, socket) do
-    {:noreply, assign(socket, status: :playing)}
+  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
+    {:noreply, assign(socket, state: :game)}
   end
 
-  def handle_info({:game_ended, _}, socket) do
-    {:noreply, assign(socket, status: :ended)}
+  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
+    {:noreply, assign(socket, state: :lobby)}
   end
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
