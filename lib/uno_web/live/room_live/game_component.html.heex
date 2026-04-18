@@ -46,8 +46,33 @@
         <.uno_card size={:lg} selectable={false} card={@top_card} />
       </div>
 
-      <div>
+      <div class="flex flex-col justify-evenly items-center gap-y-4">
         <.direction_icon direction={@direction} />
+
+        <div
+          :if={@chain != nil}
+          class="card card-sm bg-neutral text-neutral-content ring-3 ring-red-500"
+        >
+          <div class="card-body">
+            <h3 class="card-title flex-grow text-lg">Chain Active!</h3>
+            <p>
+              <span class="font-semibold">Type:</span>
+              <%= case @chain.type do %>
+                <% :draw_2 -> %>
+                  Draw 2
+                <% :wild_draw_4 -> %>
+                  Wild Draw 4
+              <% end %>
+            </p>
+            <p><span class="font-semibold">Amount:</span> +{@chain.amount}</p>
+
+            <div class="card-actions justify-center">
+              <.button class="btn btn-alert" phx-click="accept-chain" phx-target={@myself}>
+                Accept
+              </.button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div>
@@ -103,7 +128,10 @@
             Play
           </.button>
           <.button
-            disabled={!my_turn or (card_count > 20 and has_playable_card?(@hand, @top_card))}
+            disabled={
+              !my_turn or !is_nil(@chain) or
+                (card_count > 20 and has_playable_card?(@hand, @top_card))
+            }
             phx-click="draw"
             phx-target={@myself}
           >
@@ -126,6 +154,7 @@
         class="max-w-full min-h-50 overflow-x-auto"
       >
         <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
+          <% chain_active = !is_nil(@chain) %>
           <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
             <% {card_colour, card_type} = card_parts(card) %>
             <% selected? = card_selected?(@selected_cards, card, i) %>
@@ -135,7 +164,7 @@
             <div>
               <.uno_card
                 card={card}
-                disabled={!my_turn}
+                disabled={!my_turn or (chain_active and card_type != @chain.type)}
                 phx-click={
                   if is_wild and not selected? do
                     JS.set_attribute({"phx-value-type", to_string(card_type)},

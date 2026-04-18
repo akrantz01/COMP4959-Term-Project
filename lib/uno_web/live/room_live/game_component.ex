@@ -99,6 +99,25 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event("draw", _unsigned_params, socket),
     do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
 
+  def handle_event(
+        "accept-chain",
+        _unsigned_params,
+        %{assigns: %{player_id: player_id, turn_player_id: player_id, chain: nil}} = socket
+      ),
+      do: {:noreply, put_flash(socket, :error, "No chain is active")}
+
+  def handle_event(
+        "accept-chain",
+        _unsigned_params,
+        %{assigns: %{player_id: player_id, turn_player_id: player_id}} = socket
+      ) do
+    # TODO: call game to accept chain
+    {:noreply, socket}
+  end
+
+  def handle_event("accept-chain", _unsigned_params, socket),
+    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+
   def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: false}} = socket) do
     # TODO: call game to call UNO!
     {:noreply, assign(socket, :uno_called, true)}
