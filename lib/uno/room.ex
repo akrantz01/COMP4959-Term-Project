@@ -37,6 +37,8 @@ defmodule Uno.Room do
     last_winner_id: nil,
     games_played: 0,
     shutdown_timer: nil
+    game_pid: nil,
+    game_ref: nil
   ]
 
   @typedoc """
@@ -50,6 +52,8 @@ defmodule Uno.Room do
           last_winner_id: String.t() | nil,
           games_played: non_neg_integer(),
           shutdown_timer: reference() | nil
+          game_pid: pid() | nil,
+          game_ref: reference() | nil
         }
 
   @typep state :: t()
@@ -133,6 +137,20 @@ defmodule Uno.Room do
   # Implementation
 
   @impl true
+  def handle_call({:join, player_id}, _from, %{state: :in_game} = state) do
+    case Map.fetch(state.players, player_id) do
+      {:ok, player} ->
+        updated_players = Map.put(state.players, player_id, %{player | connected: true})
+        next_state = %{state | players: updated_players}
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
+
+        {:reply, {:ok, joined_event}, next_state}
+
+      :error ->
+        {:reply, {:error, :room_in_game}, state}
+    end
+  end
+
   def handle_call({:join, player_id}, _from, state) do
     state = cancel_shutdown_timer(state)
 
@@ -189,16 +207,33 @@ defmodule Uno.Room do
   end
 
   @impl true
-  def handle_call({:start, _player_id}, _from, %{state: :in_game} = _state) do
-    # TODO: Implement start game when room already in game handler
+  def handle_call({:start, _player_id}, _from, %{state: :in_game} = state) do
+    {:reply, {:error, :room_not_in_lobby}, state}
   end
 
-  def handle_call({:start, _player_id}, _from, %{admin_id: _admin_id} = _state) do
-    # TODO: Implement start game when caller not admin handler
+  def handle_call({:start, player_id}, _from, %{admin_id: admin_id} = state)
+      when player_id != admin_id do
+    {:reply, {:error, :not_room_admin}, state}
   end
 
-  def handle_call({:start, _player_id}, _from, _state) do
-    # TODO: Implement start game when caller is admin handler
+  def handle_call({:start, _player_id}, _from, state) do
+    connected_count =
+      state.players
+      |> Enum.count(fn {_id, player} -> player.connected end)
+
+    if connected_count < 2 do
+      {:reply, {:error, :not_enough_players}, state}
+    else
+      player_ids = Map.keys(state.players)
+      {:ok, game_pid} = Uno.Game.Server.start_link(state.room_id, player_ids)
+      game_ref = Process.monitor(game_pid)
+
+      next_state = %{state | state: :in_game, game_pid: game_pid, game_ref: game_ref}
+
+      PubSub.broadcast({:room, state.room_id}, %Events.GameStarted{game_id: state.room_id})
+
+      {:reply, :ok, next_state}
+    end
   end
 
   defp random_player_name do

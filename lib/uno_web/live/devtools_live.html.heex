@@ -89,6 +89,11 @@
                 <div class="flex gap-4">
                   <.input field={@publish_form[:sequence]} type="number" label="Sequence" />
                   <.input
+                    field={@publish_form[:current_player_id]}
+                    type="text"
+                    label="Current Player ID"
+                  />
+                  <.input
                     field={@publish_form[:direction]}
                     type="select"
                     label="Direction"
