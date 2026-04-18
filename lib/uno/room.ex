@@ -228,6 +228,17 @@ defmodule Uno.Room do
     end
   end
 
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{game_ref: ref} = state) do
+    next_state = %{state | state: :lobby, game_pid: nil, game_ref: nil}
+
+    unless reason == :normal do
+      PubSub.broadcast({:room, state.room_id}, %Events.GameEnded{winner_id: nil})
+    end
+
+    {:noreply, next_state}
+  end
+
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
   end
