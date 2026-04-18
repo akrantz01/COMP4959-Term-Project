@@ -16,7 +16,6 @@ defmodule UnoWeb.RoomLive do
      |> assign(
        room_id: room_id,
        player_id: player_id,
-       players: [],
        state: :lobby
      )
      |> assign(
@@ -61,14 +60,6 @@ defmodule UnoWeb.RoomLive do
   }
 
   ## HANDLE PUBSUB EVENTS
-
-  def handle_info(%Uno.Events.PlayerJoined{player_id: player_id, name: _name}, socket) do
-    {:noreply, update(socket, :players, fn p -> Enum.uniq([player_id | p]) end)}
-  end
-
-  def handle_info(%Uno.Events.PlayerLeft{player_id: player_id}, socket) do
-    {:noreply, update(socket, :players, fn p -> List.delete(p, player_id) end)}
-  end
 
   def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
     {:noreply, assign(socket, state: :game)}
