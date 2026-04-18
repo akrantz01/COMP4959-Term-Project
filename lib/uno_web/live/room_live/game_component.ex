@@ -78,9 +78,16 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "draw",
         _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id, hand: hand}} = socket
+        %{
+          assigns: %{
+            player_id: player_id,
+            turn_player_id: player_id,
+            hand: hand,
+            top_card: top_card
+          }
+        } = socket
       ) do
-    if hand_size(hand) > 20 do
+    if hand_size(hand) > 20 && !has_playable_card?(hand, top_card) do
       # TODO: call game to draw card(s)
       {:noreply, socket}
     else
@@ -192,6 +199,20 @@ defmodule UnoWeb.RoomLive.GameComponent do
     do: {:ok, assign(socket, :player_id, player_id)}
 
   # --- Private helpers
+
+  defp has_playable_card?(hand, top_card) do
+    {top_colour, top_type} = card_parts(top_card)
+
+    Map.keys(hand)
+    |> Enum.any?(fn card ->
+      case card do
+        wild when wild in ~w(wild wild_draw_4)a -> true
+        {^top_colour, _type} -> true
+        {_colour, ^top_type} -> true
+        _ -> false
+      end
+    end)
+  end
 
   defp update_hands(
          %{assigns: %{player_id: player_id}} = socket,

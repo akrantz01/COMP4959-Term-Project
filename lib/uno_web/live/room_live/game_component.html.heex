@@ -102,7 +102,11 @@
           <.button variant="primary" disabled={!my_turn} phx-click="play" phx-target={@myself}>
             Play
           </.button>
-          <.button disabled={!my_turn or card_count > 20} phx-click="draw" phx-target={@myself}>
+          <.button
+            disabled={!my_turn or (card_count > 20 and has_playable_card?(@hand, @top_card))}
+            phx-click="draw"
+            phx-target={@myself}
+          >
             Draw
           </.button>
         </div>
