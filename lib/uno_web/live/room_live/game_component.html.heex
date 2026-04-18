@@ -11,6 +11,7 @@
         <p>Direction: {@direction}</p>
         <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
         <p>Chain: {inspect(@chain)}</p>
+        <p>Selected Cards: {inspect(@selected_cards)}</p>
       </div>
     </details>
 
@@ -47,12 +48,21 @@
   <section
     id="hand-scroll"
     phx-hook=".HandScroll"
-    class="max-w-full min-h-50 overflow-x-auto"
+    class="max-w-full min-h-54 overflow-x-auto"
   >
-    <div class="flex flex-row justify-center gap-x-2 py-4 min-w-full w-fit">
-      <%= for {card, count} <- flatten_hand(@hand), _ <- 1..count do %>
+    <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
+      <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
         <div>
-          <.uno_card card={card} />
+          <% {card_colour, card_type} = card_parts(card) %>
+          <.uno_card
+            card={card}
+            phx-click="toggle-card"
+            phx-target={@myself}
+            phx-value-colour={card_colour}
+            phx-value-type={card_type}
+            phx-value-index={i}
+            class={Enum.member?(@selected_cards, {card, i}) && "-translate-y-4 scale-103"}
+          />
         </div>
       <% end %>
     </div>
