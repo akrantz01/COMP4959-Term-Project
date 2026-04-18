@@ -6,6 +6,7 @@ defmodule UnoWeb.RoomLive do
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
   def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
+    # TODO: remove once more is implemented in favour of room lookup
     if connected?(socket) do
       PubSub.subscribe({:room, room_id})
       PubSub.subscribe({:game, room_id})
@@ -42,26 +43,26 @@ defmodule UnoWeb.RoomLive do
 
   # --- end temporary ---
 
+  # --- Handle Pub/Sub events
+
+  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
+    # TODO: subscribe to game channel
+    {:noreply, assign(socket, state: :game)}
+  end
+
+  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
+    # TODO: unsubscribe from game channel
+    {:noreply, assign(socket, state: :lobby)}
+  end
+
   @forwarded_events %{
     Events.PlayerJoined => :room,
     Events.PlayerLeft => :room,
-    Events.GameStarted => :room,
-    Events.GameEnded => :room,
     Events.Sync => :game,
     Events.NextTurn => :game,
     Events.CardsPlayed => :game,
     Events.CardsDrawn => :game
   }
-
-  ## HANDLE PUBSUB EVENTS
-
-  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
-    {:noreply, assign(socket, state: :game)}
-  end
-
-  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
-    {:noreply, assign(socket, state: :lobby)}
-  end
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
     with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]),
