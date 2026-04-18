@@ -77,9 +77,9 @@ defmodule UnoWeb.RoomLive.GameComponent do
      )}
   end
 
-  def update(%{player_id: player_id}, socket) do
-    {:ok, assign(socket, :player_id, player_id)}
-  end
+  # Assign directly passed in properties
+  def update(%{id: _id, player_id: player_id}, socket),
+    do: {:ok, assign(socket, :player_id, player_id)}
 
   # --- Private UI helpers ---
 
