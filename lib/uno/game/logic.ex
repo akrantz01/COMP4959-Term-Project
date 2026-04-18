@@ -450,7 +450,7 @@ defmodule Uno.Game.Logic do
   end
 
   # GL-12
-  @spec draw_card(t(), player_id()) :: {:ok, t(), boolean()}
+  @spec draw_card(t(), player_id()) :: {:ok, t(), hand_card(), boolean()}
   def draw_card(game, player_id) do
     game =
       if deck_empty(game) do
@@ -466,7 +466,7 @@ defmodule Uno.Game.Logic do
       |> Map.put(:deck, remaining_deck)
       |> add_to_hand(player_id, drawn_card)
 
-    {:ok, game, playable_card?(drawn_card, game.top_card)}
+    {:ok, game, drawn_card, playable_card?(drawn_card, game.top_card)}
   end
 
   defp deck_empty(game) do
