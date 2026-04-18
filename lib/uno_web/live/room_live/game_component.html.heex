@@ -16,7 +16,13 @@
     </details>
 
     <div class="flex flex-wrap flex-row gap-4 justify-center">
-      <div :for={opponent <- @opponents} class="card bg-neutral text-neutral-content w-32">
+      <div
+        :for={opponent <- @opponents}
+        class={[
+          "card bg-neutral text-neutral-content w-32",
+          opponent.id == @turn_player_id && "ring-3 ring-green-600"
+        ]}
+      >
         <div class="card-body items-center text-center">
           <h3 class="card-title flex-grow">{opponent.name}</h3>
           <div class="flex-none flex flex-row items-center gap-x-3">
@@ -54,12 +60,14 @@
     phx-hook=".HandScroll"
     class="max-w-full min-h-54 overflow-x-auto"
   >
+    <% my_turn = @player_id == @turn_player_id %>
     <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
       <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
         <div>
           <% {card_colour, card_type} = card_parts(card) %>
           <.uno_card
             card={card}
+            disabled={!my_turn}
             phx-click="toggle-card"
             phx-target={@myself}
             phx-value-colour={card_colour}

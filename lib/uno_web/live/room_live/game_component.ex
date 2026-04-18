@@ -13,6 +13,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
          hand: %{},
          opponents: [],
          top_card: nil,
+         turn_player_id: nil,
+         turn_skipped: false,
          direction: :ltr,
          vulnerable_player_id: nil,
          chain: nil,
@@ -35,10 +37,11 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   def update(%{event: %Uno.Events.NextTurn{} = event}, socket) do
     # TODO: validate sequence number
-    # TODO: handle setting current player and skipped
     {:ok,
      assign(socket,
        sequence: event.sequence,
+       turn_player_id: event.player_id,
+       turn_skipped: event.skipped,
        top_card: event.top_card,
        direction: event.direction,
        vulnerable_player_id: event.vulnerable_player_id,
@@ -67,6 +70,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
            }
          end),
        top_card: event.top_card,
+       turn_player_id: event.current_player_id,
        direction: event.direction,
        vulnerable_player_id: event.vulnerable_player_id,
        chain: event.chain
