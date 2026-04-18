@@ -1,22 +1,31 @@
 defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
-
-  alias Uno.{Events, PubSub}
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
-  def mount(%{"id" => id}, _session, socket) do
-    # TODO: remove once room and game exist
-    PubSub.subscribe({:room, id})
-    PubSub.subscribe({:game, id})
+  def mount(%{"room_id" => room_id}, session, socket) do
+    player_id = Map.get(session, "player_id") || Nanoid.generate()
 
-    # TODO: retrieve from session
-    player_id = Nanoid.generate()
+    if connected?(socket) do
+      Uno.PubSub.subscribe({:room, room_id})
+      Uno.PubSub.subscribe({:game, room_id})
+    end
 
     {:ok,
      socket
-     |> assign(room_id: id, player_id: player_id, state: :lobby)
-     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
+     |> assign(
+       room_id: room_id,
+       player_id: player_id,
+       players: [],
+       state: :lobby
+     )
+     |> assign(
+       :room_form,
+       RoomForm.new(%{
+         player_id: player_id,
+         state: :lobby
+       })
+     )}
   end
 
   # --- Temporary, remove once more is implemented ---
@@ -50,6 +59,24 @@ defmodule UnoWeb.RoomLive do
     Events.CardsPlayed => :game,
     Events.CardsDrawn => :game
   }
+
+  ## HANDLE PUBSUB EVENTS
+
+  def handle_info(%Uno.Events.PlayerJoined{player_id: player_id, name: _name}, socket) do
+    {:noreply, update(socket, :players, fn p -> Enum.uniq([player_id | p]) end)}
+  end
+
+  def handle_info(%Uno.Events.PlayerLeft{player_id: player_id}, socket) do
+    {:noreply, update(socket, :players, fn p -> List.delete(p, player_id) end)}
+  end
+
+  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
+    {:noreply, assign(socket, state: :game)}
+  end
+
+  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
+    {:noreply, assign(socket, state: :lobby)}
+  end
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
     with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]),
