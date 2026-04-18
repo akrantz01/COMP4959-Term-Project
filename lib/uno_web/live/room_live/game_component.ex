@@ -76,6 +76,18 @@ defmodule UnoWeb.RoomLive.GameComponent do
     do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
 
   def handle_event(
+        "draw",
+        _unsigned_params,
+        %{assigns: %{player_id: player_id, turn_player_id: player_id}} = socket
+      ) do
+    # TODO: call game to draw card(s)
+    {:noreply, socket}
+  end
+
+  def handle_event("draw", _unsigned_params, socket),
+    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+
+  def handle_event(
         "dismiss_card_animation",
         %{"id" => id},
         %{
