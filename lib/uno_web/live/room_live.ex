@@ -5,9 +5,7 @@ defmodule UnoWeb.RoomLive do
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
-  def mount(%{"room_id" => room_id}, session, socket) do
-    player_id = Map.get(session, "player_id") || Nanoid.generate()
-
+  def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
     if connected?(socket) do
       PubSub.subscribe({:room, room_id})
       PubSub.subscribe({:game, room_id})
