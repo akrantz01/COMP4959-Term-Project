@@ -179,6 +179,7 @@ defmodule Uno.Game.Logic do
       game =
         game
         |> remove_all_from_hand(player_id, played_cards)
+        |> mark_vulnerable_player(player_id)
         |> Map.put(:top_card, List.last(played_cards))
         |> Map.put(:direction, new_direction)
         |> Map.put(:chain, new_chain)
@@ -292,6 +293,15 @@ defmodule Uno.Game.Logic do
       end)
 
     %{game | hands: Map.put(game.hands, player_id, updated_hand)}
+  end
+
+  @spec mark_vulnerable_player(t(), player_id()) :: t()
+  defp mark_vulnerable_player(game, player_id) do
+    if Map.get(game.hands, player_id, []) |> length() <= 1 do
+      Map.put(game, :vulnerable_player_id, player_id)
+    else
+      game
+    end
   end
 
   # Advances the turn by one player, based on the current direction.
