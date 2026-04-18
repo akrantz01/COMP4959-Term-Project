@@ -1,6 +1,8 @@
 defmodule UnoWeb.RoomLive.GameComponent do
   use UnoWeb, :live_component
 
+  alias UnoWeb.Forms.{Card, SelectedCard}
+
   attr :player_id, :string, required: true
 
   def mount(socket),
@@ -13,8 +15,23 @@ defmodule UnoWeb.RoomLive.GameComponent do
          top_card: nil,
          direction: :ltr,
          vulnerable_player_id: nil,
-         chain: nil
+         chain: nil,
+         selected_cards: []
        )}
+
+  def handle_event("toggle-card", params, socket) do
+    case SelectedCard.parse(params) do
+      {:ok, selected} ->
+        card = Card.format(:hand, selected.card)
+        indexed_card = {card, selected.index}
+
+        {:noreply,
+         update(socket, :selected_cards, fn cards -> toggle_selected_card(cards, indexed_card) end)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
 
   def update(%{event: %Uno.Events.NextTurn{} = event}, socket) do
     # TODO: validate sequence number
@@ -62,10 +79,21 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   # --- Private UI helpers ---
 
+  defp toggle_selected_card(cards, selected)
+  defp toggle_selected_card([], selected), do: [selected]
+  defp toggle_selected_card([selected | rest], selected), do: rest
+
+  defp toggle_selected_card([card | rest], selected),
+    do: [card | toggle_selected_card(rest, selected)]
+
   defp flatten_hand(hand),
     do:
       Enum.filter(hand, fn {_, count} -> count > 0 end)
       |> Enum.sort_by(fn {card, _} -> card_order(card) end)
+
+  defp card_parts(:wild), do: {nil, :wild}
+  defp card_parts(:wild_draw_4), do: {nil, :wild_draw_4}
+  defp card_parts({colour, type}), do: {colour, type}
 
   defp card_order(:wild), do: 0
   defp card_order(:wild_draw_4), do: 1
