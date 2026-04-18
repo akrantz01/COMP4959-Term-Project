@@ -202,6 +202,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
   defp toggle_selected_card([card | rest], selected),
     do: [card | toggle_selected_card(rest, selected)]
 
+  attr :direction, :atom, values: ~w(ltr rtl)a
+
   defp direction_icon(%{direction: direction} = assigns) do
     assigns =
       case direction do
@@ -226,6 +228,22 @@ defmodule UnoWeb.RoomLive.GameComponent do
         name={@icon}
         class={["size-full animate-[spin_5s_linear_infinite]", @animation_direction]}
       />
+    </div>
+    """
+  end
+
+  attr :show, :boolean, required: true
+
+  defp skip_icon_overlay(assigns) do
+    ~H"""
+    <div
+      class={[
+        "absolute inset-0 flex items-center justify-center bg-black/60 transition-opacity duration-300",
+        if(@show, do: "opacity-100", else: "opacity-0 pointer-events-none")
+      ]}
+      aria-hidden={not @show}
+    >
+      <.icon name="fas-ban" class="size-10 text-red-500" />
     </div>
     """
   end

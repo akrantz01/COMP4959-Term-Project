@@ -33,18 +33,7 @@
             <span>{opponent.cards}</span>
           </div>
         </div>
-        <div
-          class={[
-            "absolute inset-0 flex items-center justify-center bg-black/60 transition-opacity duration-300",
-            if(@turn_skipped && opponent.id == @turn_player_id,
-              do: "opacity-100",
-              else: "opacity-0 pointer-events-none"
-            )
-          ]}
-          aria-hidden={not (@turn_skipped && opponent.id == @turn_player_id)}
-        >
-          <.icon name="hero-no-symbol" class="size-10 text-red-500" />
-        </div>
+        <.skip_icon_overlay show={@turn_skipped && opponent.id == @turn_player_id} />
       </div>
     </div>
   </section>
@@ -101,13 +90,13 @@
     };
   </script>
 
-  <section class="max-w-full overflow-x-auto">
+  <section class="relative max-w-full overflow-x-auto">
     <div
       id="hand-scroll"
       phx-hook=".HandScroll"
       class="max-w-full min-h-50 overflow-x-auto"
     >
-      <% my_turn = @player_id == @turn_player_id %>
+      <% my_turn = @player_id == @turn_player_id && not @turn_skipped %>
       <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
         <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
           <div>
@@ -126,6 +115,7 @@
         <% end %>
       </div>
     </div>
+    <.skip_icon_overlay show={@turn_skipped && @player_id == @turn_player_id} />
   </section>
   <script :type={Phoenix.LiveView.ColocatedHook} name=".HandScroll">
     function update(el) {
