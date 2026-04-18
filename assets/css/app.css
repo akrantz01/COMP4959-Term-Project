@@ -103,3 +103,13 @@
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
 /* This file is for your main application CSS */
+
+@keyframes flip-ltr {
+    0%, 100% { transform: scaleX(1); }
+    50%      { transform: scaleX(0); }
+}
+/* These two keyframes are intentionally identical to ensure the animation is restarted */
+@keyframes flip-rtl {
+    0%, 100% { transform: scaleX(1); }
+    50%      { transform: scaleX(0); }
+}

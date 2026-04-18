@@ -86,6 +86,34 @@ defmodule UnoWeb.RoomLive.GameComponent do
   defp toggle_selected_card([card | rest], selected),
     do: [card | toggle_selected_card(rest, selected)]
 
+  defp direction_icon(%{direction: direction} = assigns) do
+    assigns =
+      case direction do
+        :ltr ->
+          assign(assigns,
+            icon: "fas-arrow-rotate-right",
+            flip: "animate-[flip-ltr_250ms_ease-in-out]",
+            animation_direction: "[animation-direction:normal]"
+          )
+
+        :rtl ->
+          assign(assigns,
+            icon: "fas-arrow-rotate-left",
+            flip: "animate-[flip-rtl_250ms_ease-in-out]",
+            animation_direction: "[animation-direction:reverse]"
+          )
+      end
+
+    ~H"""
+    <div class={["size-16", @flip]}>
+      <.icon
+        name={@icon}
+        class={["size-full animate-[spin_5s_linear_infinite]", @animation_direction]}
+      />
+    </div>
+    """
+  end
+
   defp flatten_hand(hand),
     do:
       Enum.filter(hand, fn {_, count} -> count > 0 end)
