@@ -1,6 +1,7 @@
 defmodule UnoWeb.RoomLive.GameComponent do
   use UnoWeb, :live_component
 
+  alias Phoenix.LiveView.JS
   alias UnoWeb.Forms.{Card, SelectedCard}
 
   attr :player_id, :string, required: true
@@ -27,7 +28,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   def handle_event("toggle-card", params, %{assigns: %{selected_cards: selected_cards}} = socket) do
     with {:ok, selected} <- SelectedCard.parse(params),
-         card = Card.format(:hand, selected.card),
+         card = Card.format(:played, selected.card),
          {:ok, new_cards} <- toggle_selected_card(selected_cards, {card, selected.index}) do
       {:noreply, assign(socket, :selected_cards, new_cards)}
     else
@@ -41,6 +42,38 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, socket}
     end
   end
+
+  def handle_event(
+        "play",
+        _unsigned_params,
+        %{
+          assigns: %{
+            player_id: player_id,
+            turn_player_id: player_id,
+            selected_cards: []
+          }
+        } = socket
+      ),
+      do: {:noreply, put_flash(socket, :error, "No cards selected!")}
+
+  def handle_event(
+        "play",
+        _unsigned_params,
+        %{
+          assigns: %{
+            player_id: player_id,
+            turn_player_id: player_id,
+            selected_cards: selected_cards
+          }
+        } = socket
+      ) do
+    _selected_cards = Enum.map(selected_cards, fn {card, _} -> card end)
+    # TODO: call game to play card(s)
+    {:noreply, assign(socket, :selected_cards, [])}
+  end
+
+  def handle_event("play", _unsigned_params, socket),
+    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
 
   def handle_event(
         "dismiss_card_animation",
@@ -284,6 +317,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   defp card_parts(:wild), do: {nil, :wild}
   defp card_parts(:wild_draw_4), do: {nil, :wild_draw_4}
+  defp card_parts({wild, _colour}) when wild in [:wild, :wild_draw_4], do: {nil, wild}
   defp card_parts({colour, type}), do: {colour, type}
 
   defp card_order(:wild), do: 0
@@ -301,6 +335,23 @@ defmodule UnoWeb.RoomLive.GameComponent do
   defp card_order_type(:skip), do: 10
   defp card_order_type(:reverse), do: 11
   defp card_order_type(:draw_2), do: 12
+
+  defp card_selected?(selected_cards, card, i) when card in [:wild, :wild_draw_4] do
+    Enum.any?(selected_cards, fn
+      {{^card, _colour}, ^i} -> true
+      _ -> false
+    end)
+  end
+
+  defp card_selected?(selected_cards, card, i),
+    do: Enum.member?(selected_cards, {card, i})
+
+  defp selected_wild_colour(selected_cards, card, i) do
+    Enum.find_value(selected_cards, fn
+      {{^card, colour}, ^i} -> colour
+      _ -> nil
+    end)
+  end
 
   defp card_animation_style(%{kind: :played, actor_id: actor}, player_id) when actor == player_id,
     do: "--card-start: 100%"
