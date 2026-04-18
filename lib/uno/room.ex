@@ -15,7 +15,6 @@ defmodule Uno.Room do
 
   use GenServer
 
-  alias Mix.PubSub
   alias Uno.Events, as: Events
   alias Uno.PubSub
 
