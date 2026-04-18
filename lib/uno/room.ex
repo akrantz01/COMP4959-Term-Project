@@ -284,11 +284,12 @@ defmodule Uno.Room do
       end
 
     # 2. Update room stats and switch to lobby state
-    next_state = %{state |
-      players: updated_players,
-      last_winner_id: winner_id,
-      games_played: state.games_played + 1,
-      state: :lobby
+    next_state = %{
+      state
+      | players: updated_players,
+        last_winner_id: winner_id,
+        games_played: state.games_played + 1,
+        state: :lobby
     }
 
     {:noreply, next_state}
