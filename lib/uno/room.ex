@@ -144,6 +144,13 @@ defmodule Uno.Room do
         next_state = %{state | players: updated_players}
         joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
 
+        # Code Added by Aarshdeep Vandal (R-10)
+        # Forward the connection event to the active Game GenServer
+        if state.game_pid != nil do
+          Uno.Game.Server.connect(state.game_pid, player_id)
+        end
+        # end of code added by aarshdeep vandal (R-10)
+
         {:reply, {:ok, joined_event}, next_state}
 
       :error ->
@@ -192,6 +199,13 @@ defmodule Uno.Room do
 
         left_event = %Events.PlayerLeft{player_id: player_id}
         :ok = PubSub.broadcast({:room, state.room_id}, left_event)
+
+        # Code Added by Aarshdeep Vandal (R-10)
+        # If the room is currently in a game, tell the Game process the player left
+        if state.state == :in_game and state.game_pid != nil do
+          Uno.Game.Server.disconnect(state.game_pid, player_id)
+        end
+        # end of code added by aarshdeep vandal (R-10)
 
         {:reply, {:ok, left_event}, next_state}
     end
