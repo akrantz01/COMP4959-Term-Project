@@ -449,41 +449,25 @@ defmodule Uno.Game.Logic do
     end
   end
 
-# GL-12, 13
-@spec draw_card(t(), player_id()) :: {:ok, t(), boolean() | :continue | :complete}
-def draw_card(game, player_id) do
-  game =
-    if deck_empty(game) do
-      %{game | deck: generate_deck() |> shuffle_deck()}
-    else
+  # GL-12, 13
+  @spec draw_card(t(), player_id()) :: {:ok, t(), hand_card(), boolean()}
+  def draw_card(game, player_id) do
+    game =
+      if deck_empty(game) do
+        %{game | deck: generate_deck() |> shuffle_deck()}
+      else
+        game
+      end
+
+    [drawn_card | remaining_deck] = game.deck
+
+    game =
       game
-    end
+      |> Map.put(:deck, remaining_deck)
+      |> add_to_hand(player_id, drawn_card)
 
-  [drawn_card | remaining_deck] = game.deck
-
-  game =
-    game
-    |> Map.put(:deck, remaining_deck)
-    |> add_to_hand(player_id, drawn_card)
-
-  case Map.get(game.penalties, player_id, 0) do
-    p when p > 0 ->
-      remaining = p - 1
-
-      penalties =
-        if remaining == 0 do
-          Map.delete(game.penalties, player_id)
-        else
-          Map.put(game.penalties, player_id, remaining)
-        end
-
-      status = if remaining > 0, do: :continue, else: :complete
-      {:ok, %{game | penalties: penalties}, status}
-
-    _ ->
-      {:ok, game, playable_card?(drawn_card, game.top_card)}
+    {:ok, game, drawn_card, playable_card?(drawn_card, game.top_card)}
   end
-end
 
   defp deck_empty(game) do
     game.deck == []
