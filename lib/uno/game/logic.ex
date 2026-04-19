@@ -461,7 +461,7 @@ defmodule Uno.Game.Logic do
   end
 
   # GL-12
-  @spec draw_card(t(), player_id()) :: {:ok, t(), boolean()}
+  @spec draw_card(t(), player_id()) :: {:ok, t(), hand_card(), boolean()}
   def draw_card(game, player_id) do
     game =
       if deck_empty(game) do
@@ -477,7 +477,7 @@ defmodule Uno.Game.Logic do
       |> Map.put(:deck, remaining_deck)
       |> add_to_hand(player_id, drawn_card)
 
-    {:ok, game, playable_card?(drawn_card, game.top_card)}
+    {:ok, game, drawn_card, playable_card?(drawn_card, game.top_card)}
   end
 
   defp deck_empty(game) do
@@ -487,6 +487,19 @@ defmodule Uno.Game.Logic do
   defp add_to_hand(game, player_id, card) do
     new_hand = [card | Map.get(game.hands, player_id, [])]
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
+  end
+
+  # GL-14
+  @spec accept_chain(t(), player_id()) :: {:ok, t()} | {:error, :no_active_chain}
+  def accept_chain(%__MODULE__{chain: nil}, _player_id), do: {:error, :no_active_chain}
+
+  def accept_chain(%__MODULE__{chain: %{amount: amount}} = game, player_id) do
+    penalties =
+      Map.update(game.penalties, player_id, amount, fn existing ->
+        existing + amount
+      end)
+
+    {:ok, %{game | penalties: penalties, chain: nil}}
   end
 
   # GL-15
@@ -528,5 +541,12 @@ defmodule Uno.Game.Logic do
       |> Map.put(:vulnerable_player_id, nil)
 
     {:ok, updated_game, updated_penalties}
+  end
+
+  # GL-19
+  # Doesn't handle errors if a player isn't found
+  @spec has_won(t(), player_id()) :: boolean()
+  def has_won(game, player_id) do
+    game.hands[player_id] == []
   end
 end

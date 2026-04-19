@@ -1,14 +1,15 @@
 defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
+
+  alias Uno.{Events, PubSub}
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
-  def mount(%{"room_id" => room_id}, session, socket) do
-    player_id = Map.get(session, "player_id") || Nanoid.generate()
-
+  def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
+    # TODO: remove once more is implemented in favour of room lookup
     if connected?(socket) do
-      Uno.PubSub.subscribe({:room, room_id})
-      Uno.PubSub.subscribe({:game, room_id})
+      PubSub.subscribe({:room, room_id})
+      PubSub.subscribe({:game, room_id})
     end
 
     {:ok,
@@ -16,16 +17,9 @@ defmodule UnoWeb.RoomLive do
      |> assign(
        room_id: room_id,
        player_id: player_id,
-       players: [],
        state: :lobby
      )
-     |> assign(
-       :room_form,
-       RoomForm.new(%{
-         player_id: player_id,
-         state: :lobby
-       })
-     )}
+     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
   end
 
   # --- Temporary, remove once more is implemented ---
@@ -49,34 +43,26 @@ defmodule UnoWeb.RoomLive do
 
   # --- end temporary ---
 
+  # --- Handle Pub/Sub events
+
+  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
+    # TODO: subscribe to game channel
+    {:noreply, assign(socket, state: :game)}
+  end
+
+  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
+    # TODO: unsubscribe from game channel
+    {:noreply, assign(socket, state: :lobby)}
+  end
+
   @forwarded_events %{
     Events.PlayerJoined => :room,
     Events.PlayerLeft => :room,
-    Events.GameStarted => :room,
-    Events.GameEnded => :room,
     Events.Sync => :game,
     Events.NextTurn => :game,
     Events.CardsPlayed => :game,
     Events.CardsDrawn => :game
   }
-
-  ## HANDLE PUBSUB EVENTS
-
-  def handle_info(%Uno.Events.PlayerJoined{player_id: player_id, name: _name}, socket) do
-    {:noreply, update(socket, :players, fn p -> Enum.uniq([player_id | p]) end)}
-  end
-
-  def handle_info(%Uno.Events.PlayerLeft{player_id: player_id}, socket) do
-    {:noreply, update(socket, :players, fn p -> List.delete(p, player_id) end)}
-  end
-
-  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
-    {:noreply, assign(socket, state: :game)}
-  end
-
-  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
-    {:noreply, assign(socket, state: :lobby)}
-  end
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
     with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]),

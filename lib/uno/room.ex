@@ -13,7 +13,7 @@ defmodule Uno.Room do
   - `games_played`: Number of completed games in this room.
   """
 
-  use GenServer
+  use GenServer, restart: :transient
 
   alias Uno.Events, as: Events
   alias Uno.PubSub
@@ -26,6 +26,8 @@ defmodule Uno.Room do
           wins: non_neg_integer()
         }
 
+  @shutdown_timeout :timer.minutes(1)
+
   @enforce_keys [:room_id]
   defstruct [
     :room_id,
@@ -34,6 +36,7 @@ defmodule Uno.Room do
     admin_id: nil,
     last_winner_id: nil,
     games_played: 0,
+    shutdown_timer: nil,
     game_pid: nil,
     game_ref: nil
   ]
@@ -48,6 +51,7 @@ defmodule Uno.Room do
           admin_id: String.t() | nil,
           last_winner_id: String.t() | nil,
           games_played: non_neg_integer(),
+          shutdown_timer: reference() | nil,
           game_pid: pid() | nil,
           game_ref: reference() | nil
         }
@@ -148,6 +152,8 @@ defmodule Uno.Room do
   end
 
   def handle_call({:join, player_id}, _from, state) do
+    state = cancel_shutdown_timer(state)
+
     case Map.fetch(state.players, player_id) do
       {:ok, player} ->
         updated_players = Map.put(state.players, player_id, %{player | connected: true})
@@ -182,8 +188,17 @@ defmodule Uno.Room do
         next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
         next_state = %{state | players: next_players, admin_id: next_admin_id}
 
+        next_state = maybe_start_shutdown_timer(next_state)
+
         left_event = %Events.PlayerLeft{player_id: player_id}
         :ok = PubSub.broadcast({:room, state.room_id}, left_event)
+
+        # Added by Aarshdeep Vandal: Created a AdminChanged event in events.ex. Calling that event here
+        # so the frontend gets a broadcast that the room re-assigned the admin status to a new connected player
+        if state.admin_id != next_admin_id do
+          admin_change_event = %Events.AdminChanged{new_admin_id: next_admin_id}
+          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
+        end
 
         {:reply, {:ok, left_event}, next_state}
     end
@@ -239,6 +254,10 @@ defmodule Uno.Room do
     {:noreply, next_state}
   end
 
+  def handle_info(:shutdown_timeout, state) do
+    {:stop, :normal, state}
+  end
+
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
   end
@@ -273,5 +292,24 @@ defmodule Uno.Room do
     players
     |> Map.keys()
     |> List.first()
+  end
+
+  defp cancel_shutdown_timer(%{shutdown_timer: nil} = state), do: state
+
+  defp cancel_shutdown_timer(%{shutdown_timer: timer} = state) do
+    Process.cancel_timer(timer)
+    %{state | shutdown_timer: nil}
+  end
+
+  defp maybe_start_shutdown_timer(state) do
+    has_connected =
+      Enum.any?(state.players, fn {_id, player} -> player.connected end)
+
+    if has_connected do
+      state
+    else
+      timer = Process.send_after(self(), :shutdown_timeout, @shutdown_timeout)
+      %{state | shutdown_timer: timer}
+    end
   end
 end

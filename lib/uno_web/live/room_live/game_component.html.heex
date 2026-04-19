@@ -1,105 +1,251 @@
-<div class="grid flex-1 min-h-0 grid-rows-[auto_1fr_auto]">
-  <section class="flex-none">
-    <details>
-      <summary>State</summary>
-      <div>
-        <p>Player ID: {@player_id}</p>
-        <p>Sequence: {@sequence}</p>
-        <p>Hand: {inspect(@hand)}</p>
-        <p>Opponents: {inspect(@opponents)}</p>
-        <p>Top Card: {inspect(@top_card)}</p>
-        <p>Direction: {@direction}</p>
-        <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
-        <p>Chain: {inspect(@chain)}</p>
-        <p>Selected Cards: {inspect(@selected_cards)}</p>
-      </div>
-    </details>
+<div class="flex-1 min-h-0 flex">
+  <Layouts.flash_group flash={@flash} />
 
-    <div class="flex flex-wrap flex-row gap-4 justify-center">
-      <div
-        :for={opponent <- @opponents}
-        class={[
-          "card bg-neutral text-neutral-content w-32",
-          opponent.id == @turn_player_id && "ring-3 ring-green-600"
-        ]}
-      >
-        <div class="card-body items-center text-center">
-          <h3 class="card-title flex-grow">{opponent.name}</h3>
-          <div class="flex-none flex flex-row items-center gap-x-3">
-            <div class="relative h-4 w-5" aria-hidden="true">
-              <div class="absolute left-0 top-0 h-4 w-3 rounded-sm border border-white/15 bg-white/80 shadow-sm" />
-              <div class="absolute left-1.5 top-0.75 h-4 w-3 rounded-sm border border-white/15 bg-white shadow-sm" />
+  <div class="flex-1 grid grid-rows-[auto_1fr_auto]">
+    <section class="flex-none">
+      <details>
+        <summary>State</summary>
+        <div>
+          <p>Player ID: {@player_id}</p>
+          <p>Sequence: {@sequence}</p>
+          <p>Hand: {inspect(@hand)}</p>
+          <p>Opponents: {inspect(@opponents)}</p>
+          <p>Top Card: {inspect(@top_card)}</p>
+          <p>Direction: {@direction}</p>
+          <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
+          <p>Chain: {inspect(@chain)}</p>
+          <p>Selected Cards: {inspect(@selected_cards)}</p>
+        </div>
+      </details>
+
+      <div class="flex flex-wrap flex-row gap-4 justify-center">
+        <div
+          :for={opponent <- @opponents}
+          class={[
+            "card bg-neutral text-neutral-content w-32 relative overflow-hidden",
+            opponent.id == @turn_player_id && "ring-3 ring-green-600"
+          ]}
+        >
+          <div class="card-body items-center text-center">
+            <h3 class="card-title flex-grow">{opponent.name}</h3>
+            <div class="flex-none flex flex-row items-center gap-x-3">
+              <div class="relative h-4 w-5" aria-hidden="true">
+                <div class="absolute left-0 top-0 h-4 w-3 rounded-sm border border-white/15 bg-white/80 shadow-sm" />
+                <div class="absolute left-1.5 top-0.75 h-4 w-3 rounded-sm border border-white/15 bg-white shadow-sm" />
+              </div>
+              <span>{opponent.cards}</span>
             </div>
-            <span>{opponent.cards}</span>
+          </div>
+          <.skip_icon_overlay show={@turn_skipped && opponent.id == @turn_player_id} />
+        </div>
+      </div>
+    </section>
+
+    <section class="relative flex justify-evenly items-center">
+      <div :if={@top_card != nil}>
+        <.uno_card size={:lg} selectable={false} card={@top_card} />
+      </div>
+
+      <div class="flex flex-col justify-evenly items-center gap-y-4">
+        <.direction_icon direction={@direction} />
+
+        <div
+          :if={@chain != nil}
+          class="card card-sm bg-neutral text-neutral-content ring-3 ring-red-500"
+        >
+          <div class="card-body">
+            <h3 class="card-title flex-grow text-lg">Chain Active!</h3>
+            <p>
+              <span class="font-semibold">Type:</span>
+              <%= case @chain.type do %>
+                <% :draw_2 -> %>
+                  Draw 2
+                <% :wild_draw_4 -> %>
+                  Wild Draw 4
+              <% end %>
+            </p>
+            <p><span class="font-semibold">Amount:</span> +{@chain.amount}</p>
+
+            <div class="card-actions justify-center">
+              <.button class="btn btn-alert" phx-click="accept-chain" phx-target={@myself}>
+                Accept
+              </.button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
 
-  <section class="flex justify-evenly items-center">
-    <div :if={@top_card != nil}>
-      <.uno_card size={:lg} selectable={false} card={@top_card} />
-    </div>
+      <div>
+        <.card_stack phx-click="draw" phx-target={@myself}>
+          <:card><.flipped_card size={:lg} /></:card>
+          <:card><.flipped_card size={:lg} /></:card>
+          <:card><.flipped_card size={:lg} /></:card>
+        </.card_stack>
+      </div>
 
-    <div>
-      <.direction_icon direction={@direction} />
-    </div>
-
-    <div>
-      <.card_stack>
-        <:card><.flipped_card size={:lg} /></:card>
-        <:card><.flipped_card size={:lg} /></:card>
-        <:card><.flipped_card size={:lg} /></:card>
-      </.card_stack>
-    </div>
-  </section>
-
-  <section
-    id="hand-scroll"
-    phx-hook=".HandScroll"
-    class="max-w-full min-h-54 overflow-x-auto"
-  >
-    <% my_turn = @player_id == @turn_player_id %>
-    <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
-      <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
-        <div>
-          <% {card_colour, card_type} = card_parts(card) %>
-          <.uno_card
-            card={card}
-            disabled={!my_turn}
-            phx-click="toggle-card"
-            phx-target={@myself}
-            phx-value-colour={card_colour}
-            phx-value-type={card_type}
-            phx-value-index={i}
-            class={Enum.member?(@selected_cards, {card, i}) && "-translate-y-4 scale-103"}
-          />
+      <div
+        :if={@current_card_animation != nil}
+        id={"card-animation-#{@current_card_animation.id}"}
+        data-id={@current_card_animation.id}
+        phx-hook=".CardAnimation"
+        phx-target={@myself}
+        class="pointer-events-none absolute inset-x-0 z-10 bg-black/60 py-12 animate-[card-overlay-animation_1000ms_ease-in-out] [animation-fill-mode:forwards]"
+        style={card_animation_style(@current_card_animation, @player_id)}
+      >
+        <div class="flex flex-row flex-wrap gap-2 justify-center animate-[card-list-animation_1000ms_ease-in-out] [animation-fill-mode:forwards]">
+          <div :for={card <- @current_card_animation.cards}>
+            <%= if card == :hidden do %>
+              <.flipped_card />
+            <% else %>
+              <.uno_card card={card} selectable={false} />
+            <% end %>
+          </div>
         </div>
-      <% end %>
-    </div>
-  </section>
-  <script :type={Phoenix.LiveView.ColocatedHook} name=".HandScroll">
-    function update(el) {
-      const { scrollLeft, scrollWidth, clientWidth } = el;
-      const l = scrollLeft > 1 ? "transparent, black 3rem," : "";
-      const r = scrollLeft + clientWidth < scrollWidth - 1 ? ",black calc(100% - 3rem), transparent" : "";
-      el.style.maskImage = (l || r) ? `linear-gradient(to right, ${l}black${r})` : "none";
-    }
+      </div>
+    </section>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".CardAnimation">
+      export default {
+        mounted() {
+          const id = parseInt(this.el.dataset.id);
+          this.timeout = setTimeout(
+            () => this.pushEventTo(this.el, "dismiss_card_animation", { id }),
+            1000
+          );
+        },
+        destroyed() {
+          clearTimeout(this.timeout);
+        }
+      };
+    </script>
 
-    export default {
-      mounted() {
-        this.onScroll = () => update(this.el);
-        this.el.addEventListener("scroll", this.onScroll);
-        this.observer = new ResizeObserver(() => update(this.el));
-        this.observer.observe(this.el);
-        update(this.el);
-      },
-      updated() { update(this.el); },
-      destroyed() {
-        this.el.removeEventListener("scroll", this.onScroll);
-        this.observer.disconnect();
-      },
-    };
-  </script>
+    <% my_turn = @player_id == @turn_player_id && not @turn_skipped %>
+    <% card_count = hand_size(@hand) %>
+    <section class="relative max-w-full overflow-x-auto">
+      <div class="flex justify-evenly items-center px-6 max-w-full">
+        <p>Cards: {card_count}</p>
+        <div>
+          <.button variant="primary" disabled={!my_turn} phx-click="play" phx-target={@myself}>
+            Play
+          </.button>
+          <.button
+            disabled={
+              !my_turn or !is_nil(@chain) or
+                (card_count > 20 and has_playable_card?(@hand, @top_card))
+            }
+            phx-click="draw"
+            phx-target={@myself}
+          >
+            Draw
+          </.button>
+        </div>
+        <.button
+          class="btn btn-error"
+          disabled={@uno_called}
+          phx-click="uno"
+          phx-target={@myself}
+        >
+          UNO!
+        </.button>
+      </div>
+
+      <div
+        id="hand-scroll"
+        phx-hook=".HandScroll"
+        class="max-w-full min-h-50 overflow-x-auto"
+      >
+        <div class="flex flex-row justify-center gap-x-2 py-6 min-w-full w-fit">
+          <% chain_active = !is_nil(@chain) %>
+          <%= for {card, count} <- flatten_hand(@hand), i <- 1..count do %>
+            <% {card_colour, card_type} = card_parts(card) %>
+            <% selected? = card_selected?(@selected_cards, card, i) %>
+            <% is_wild = card_type in [:wild, :wild_draw_4] %>
+            <% effective_colour =
+              if is_wild, do: selected_wild_colour(@selected_cards, card, i), else: card_colour %>
+            <div>
+              <.uno_card
+                card={card}
+                disabled={!my_turn or (chain_active and card_type != @chain.type)}
+                phx-click={
+                  if is_wild and not selected? do
+                    JS.set_attribute({"phx-value-type", to_string(card_type)},
+                      to: "#wild-colour-picker button"
+                    )
+                    |> JS.set_attribute({"phx-value-index", to_string(i)},
+                      to: "#wild-colour-picker button"
+                    )
+                    |> JS.show(to: "#wild-colour-picker", display: "flex")
+                  else
+                    "toggle-card"
+                  end
+                }
+                phx-target={@myself}
+                phx-value-colour={effective_colour}
+                phx-value-type={card_type}
+                phx-value-index={i}
+                class={selected? && "-translate-y-4 scale-103"}
+              />
+            </div>
+          <% end %>
+        </div>
+      </div>
+      <.skip_icon_overlay show={@turn_skipped && @player_id == @turn_player_id} />
+    </section>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".HandScroll">
+      function update(el) {
+        const { scrollLeft, scrollWidth, clientWidth } = el;
+        const l = scrollLeft > 1 ? "transparent, black 3rem," : "";
+        const r = scrollLeft + clientWidth < scrollWidth - 1 ? ",black calc(100% - 3rem), transparent" : "";
+        el.style.maskImage = (l || r) ? `linear-gradient(to right, ${l}black${r})` : "none";
+      }
+
+      export default {
+        mounted() {
+          this.onScroll = () => update(this.el);
+          this.el.addEventListener("scroll", this.onScroll);
+          this.observer = new ResizeObserver(() => update(this.el));
+          this.observer.observe(this.el);
+          update(this.el);
+        },
+        updated() { update(this.el); },
+        destroyed() {
+          this.el.removeEventListener("scroll", this.onScroll);
+          this.observer.disconnect();
+        },
+      };
+    </script>
+  </div>
+
+  <div
+    id="wild-colour-picker"
+    class="hidden fixed inset-0 z-50 items-center justify-center bg-black/60"
+  >
+    <button
+      type="button"
+      class="absolute inset-0 w-full h-full cursor-default"
+      aria-label="Cancel colour selection"
+      phx-click={JS.hide(to: "#wild-colour-picker")}
+    />
+    <div class="relative bg-base-100 rounded-lg p-6 shadow-xl w-fit">
+      <h3 class="text-lg font-semibold mb-4 text-center">Choose a colour</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <button
+          :for={
+            {colour, classes} <- [
+              {"red", "bg-red-500 hover:bg-red-600"},
+              {"yellow", "bg-yellow-400 hover:bg-yellow-500"},
+              {"green", "bg-green-500 hover:bg-green-600"},
+              {"blue", "bg-blue-500 hover:bg-blue-600"}
+            ]
+          }
+          type="button"
+          phx-value-colour={colour}
+          phx-click={JS.push("toggle-card") |> JS.hide(to: "#wild-colour-picker")}
+          phx-target={@myself}
+          class={["btn h-16 w-24 text-white capitalize border-none", classes]}
+        >
+          {colour}
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
