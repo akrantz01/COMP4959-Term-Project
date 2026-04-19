@@ -165,16 +165,18 @@ defmodule Uno.Game.Server do
         new_state = mark_vulnerability(new_state, player_id, player_hand)
 
         new_state = broadcast_cards_played(new_state, player_id, cards, player_hand)
+        new_state = resolve_pending_penalties(new_state)
 
-        if Enum.empty?(player_hand) do
-          new_state = enqueue_broadcast(new_state, %Events.GameEnded{winner_id: player_id})
-          {:stop, :normal, :ok, new_state}
-        else
-          skip_count = count_skips(cards)
-          new_state = apply_skips(old_logic, new_state, skip_count)
-          new_state = broadcast_next_turn(new_state, false)
-          new_state = start_inactivity_timer(new_state)
-          {:reply, :ok, new_state}
+        case maybe_emit_game_ended(new_state, player_id, player_hand) do
+          {:game_ended, ended_state} ->
+            {:stop, :normal, :ok, ended_state}
+
+          {:continue, continuing_state} ->
+            skip_count = count_skips(cards)
+            continuing_state = apply_skips(old_logic, continuing_state, skip_count)
+            continuing_state = broadcast_next_turn(continuing_state, false)
+            continuing_state = start_inactivity_timer(continuing_state)
+            {:reply, :ok, continuing_state}
         end
 
       {:error, reason} ->
@@ -186,7 +188,6 @@ defmodule Uno.Game.Server do
   def handle_call({:draw, player_id}, _from, state) do
     case draw_loop(state.logic_state, player_id, []) do
       {:ok, updated_logic, drawn_cards} ->
-        # Broadcast events for each drawn card
         Enum.each(drawn_cards, fn card ->
           PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:card_drawn, player_id, card})
         end)
@@ -226,46 +227,6 @@ defmodule Uno.Game.Server do
       logic ->
         handle_uno_call(state, player_id, logic)
     end
-  end
-
-  defp handle_uno_call(state, player_id, logic) do
-    vulnerable_player_id = logic.vulnerable_player_id
-
-    if vulnerable_player_id != nil and vulnerable_player_id != player_id do
-      handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id)
-    else
-      process_uno_call(state, player_id)
-    end
-  end
-
-  defp handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id) do
-    case Map.get(state.vulnerable_players, vulnerable_player_id) do
-      vulnerable_timestamp when is_integer(vulnerable_timestamp) ->
-        current_time = System.monotonic_time(:millisecond)
-        delay = vulnerable_timestamp + @uno_grace_period - current_time
-
-        if delay > 0 do
-          Process.send_after(self(), {:uno_call_buffer, player_id, logic.sequence}, delay)
-          {:reply, :ok, state}
-        else
-          process_uno_call(state, player_id)
-        end
-
-      _ ->
-        process_uno_call(state, player_id)
-    end
-  end
-
-  defp process_uno_call(state, player_id) do
-    {:ok, updated_logic, penalties_map} = Logic.uno(state.logic_state, player_id)
-
-    new_state =
-      state
-      |> Map.put(:logic_state, updated_logic)
-      |> sync_vulnerability(updated_logic)
-      |> resolve_penalties(penalties_map)
-
-    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -326,6 +287,48 @@ defmodule Uno.Game.Server do
     end
   end
 
+  defp handle_uno_call(state, player_id, logic) do
+    vulnerable_player_id = logic.vulnerable_player_id
+
+    if vulnerable_player_id != nil and vulnerable_player_id != player_id do
+      handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id)
+    else
+      process_uno_call(state, player_id)
+    end
+  end
+
+  defp handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id) do
+    case Map.get(state.vulnerable_players, vulnerable_player_id) do
+      vulnerable_timestamp when is_integer(vulnerable_timestamp) ->
+        current_time = System.monotonic_time(:millisecond)
+        delay = vulnerable_timestamp + @uno_grace_period - current_time
+
+        if delay > 0 do
+          Process.send_after(self(), {:uno_call_buffer, player_id, logic.sequence}, delay)
+          {:reply, :ok, state}
+        else
+          process_uno_call(state, player_id)
+        end
+
+      _ ->
+        process_uno_call(state, player_id)
+    end
+  end
+
+  defp process_uno_call(state, player_id) do
+    case Logic.uno(state.logic_state, player_id) do
+      {:ok, updated_logic, penalties_map} ->
+        new_state =
+          state
+          |> Map.put(:logic_state, updated_logic)
+          |> sync_vulnerability(updated_logic)
+          |> merge_penalties(penalties_map)
+          |> resolve_pending_penalties()
+
+        {:reply, :ok, new_state}
+    end
+  end
+
   # GS-14: Schedules an inactivity timeout for the current player if they are not in auto_play_set.
   # The sequence number is embedded so stale timer fires are no-ops in inactivity_timeout/3.
   @spec start_inactivity_timer(map()) :: map()
@@ -367,15 +370,43 @@ defmodule Uno.Game.Server do
     %{state | vulnerable_players: vulnerable_players}
   end
 
-  defp resolve_penalties(state, penalties) do
-    Enum.reduce(penalties, state, fn {player_id, count}, acc ->
+  defp merge_penalties(state, penalties) do
+    merged_penalties =
+      Map.merge(state.logic_state.penalties, penalties, fn _player_id, existing, incoming ->
+        existing + incoming
+      end)
+
+    %{state | logic_state: %{state.logic_state | penalties: merged_penalties}}
+  end
+
+  defp resolve_pending_penalties(state) do
+    penalties =
+      state.logic_state.penalties
+      |> Enum.filter(fn {_player_id, count} -> count > 0 end)
+      |> Map.new()
+
+    state = %{state | logic_state: %{state.logic_state | penalties: penalties}}
+
+    penalties
+    |> Enum.reduce(state, fn {player_id, count}, acc ->
       draw_penalty_cards(acc, player_id, count)
     end)
+    |> clear_resolved_penalties()
+  end
+
+  defp clear_resolved_penalties(state) do
+    remaining_penalties =
+      state.logic_state.penalties
+      |> Enum.filter(fn {_player_id, count} -> count > 0 end)
+      |> Map.new()
+
+    %{state | logic_state: %{state.logic_state | penalties: remaining_penalties}}
   end
 
   defp draw_penalty_cards(state, player_id, count) when count > 0 do
     {:ok, new_logic, drawn_card, _playable?} = Logic.draw_card(state.logic_state, player_id)
     new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+    new_logic = decrement_penalty(new_logic, player_id)
     new_state = %{state | logic_state: new_logic}
     new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
     draw_penalty_cards(new_state, player_id, count - 1)
@@ -383,12 +414,16 @@ defmodule Uno.Game.Server do
 
   defp draw_penalty_cards(state, _player_id, 0), do: state
 
+  defp decrement_penalty(logic, player_id) do
+    updated_count = logic.penalties |> Map.get(player_id, 0) |> Kernel.-(1) |> max(0)
+    %{logic | penalties: Map.put(logic.penalties, player_id, updated_count)}
+  end
+
   # GS-15: Draws one card at a time until the drawn card is playable, then plays it.
   @spec draw_until_playable(map(), Logic.player_id()) :: map()
   defp draw_until_playable(state, player_id) do
-    {:ok, new_logic, _drawn, playable?} = Logic.draw_card(state.logic_state, player_id)
+    {:ok, new_logic, drawn_card, playable?} = Logic.draw_card(state.logic_state, player_id)
     new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
-    drawn_card = hd(new_hand)
     new_state = %{state | logic_state: new_logic}
     new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
 
@@ -412,14 +447,17 @@ defmodule Uno.Game.Server do
         new_state = mark_vulnerability(new_state, player_id, player_hand)
 
         new_state = broadcast_cards_played(new_state, player_id, cards, player_hand)
+        new_state = resolve_pending_penalties(new_state)
 
-        if Enum.empty?(player_hand) do
-          enqueue_broadcast(new_state, %Events.GameEnded{winner_id: player_id})
-        else
-          skip_count = count_skips(cards)
-          new_state = apply_skips(old_logic, new_state, skip_count)
-          new_state = broadcast_next_turn(new_state, false)
-          start_inactivity_timer(new_state)
+        case maybe_emit_game_ended(new_state, player_id, player_hand) do
+          {:game_ended, ended_state} ->
+            ended_state
+
+          {:continue, continuing_state} ->
+            skip_count = count_skips(cards)
+            continuing_state = apply_skips(old_logic, continuing_state, skip_count)
+            continuing_state = broadcast_next_turn(continuing_state, false)
+            start_inactivity_timer(continuing_state)
         end
 
       {:error, _reason} ->
@@ -444,6 +482,14 @@ defmodule Uno.Game.Server do
   defp to_played_card(:wild), do: {:wild, :red}
   defp to_played_card(:wild_draw_4), do: {:wild_draw_4, :red}
   defp to_played_card(card), do: card
+
+  defp maybe_emit_game_ended(state, player_id, player_hand) do
+    if Enum.empty?(player_hand) do
+      {:game_ended, enqueue_broadcast(state, %Events.GameEnded{winner_id: player_id})}
+    else
+      {:continue, state}
+    end
+  end
 
   # Builds a full-state Sync event from the current logic state.
   @spec build_sync(map()) :: Events.Sync.t()
