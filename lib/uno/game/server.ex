@@ -199,8 +199,23 @@ defmodule Uno.Game.Server do
   end
 
   @impl true
-  def handle_call({:accept_chain, _player_id}, _from, state) do
-    {:reply, :ok, state}
+  def handle_call({:accept_chain, player_id}, _from, state) do
+    case Logic.accept_chain(state.logic_state, player_id) do
+      {:ok, updated_logic} ->
+        Enum.each(updated_logic.penalties, fn {affected_player_id, penalty_count} ->
+          PubSub.broadcast(
+            Uno.PubSub,
+            "game:#{state.room_id}",
+            {:penalty_assigned, affected_player_id, penalty_count}
+          )
+        end)
+
+        updated_state = %{state | logic_state: updated_logic}
+        {:reply, :ok, updated_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   @impl true
