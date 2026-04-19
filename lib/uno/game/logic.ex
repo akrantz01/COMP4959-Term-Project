@@ -449,41 +449,41 @@ defmodule Uno.Game.Logic do
     end
   end
 
-  # GL-12, 13
-  @spec draw_card(t(), player_id()) :: {:ok, t(), boolean() | :continue | :complete}
-  def draw_card(game, player_id) do
-    game =
-      if deck_empty(game) do
-        %{game | deck: generate_deck() |> shuffle_deck()}
-      else
-        game
-      end
-
-    [drawn_card | remaining_deck] = game.deck
-
-    game =
+# GL-12, 13
+@spec draw_card(t(), player_id()) :: {:ok, t(), boolean() | :continue | :complete}
+def draw_card(game, player_id) do
+  game =
+    if deck_empty(game) do
+      %{game | deck: generate_deck() |> shuffle_deck()}
+    else
       game
-      |> Map.put(:deck, remaining_deck)
-      |> add_to_hand(player_id, drawn_card)
-
-    case Map.get(game.penalties, player_id, 0) do
-      p when p > 0 ->
-        remaining = p - 1
-
-        penalties =
-          if remaining == 0 do
-            Map.delete(game.penalties, player_id)
-          else
-            Map.put(game.penalties, player_id, remaining)
-          end
-
-        status = if remaining > 0, do: :continue, else: :complete
-        {:ok, %{game | penalties: penalties}, status}
-
-      _ ->
-        {:ok, game, playable_card?(drawn_card, game.top_card)}
     end
+
+  [drawn_card | remaining_deck] = game.deck
+
+  game =
+    game
+    |> Map.put(:deck, remaining_deck)
+    |> add_to_hand(player_id, drawn_card)
+
+  case Map.get(game.penalties, player_id, 0) do
+    p when p > 0 ->
+      remaining = p - 1
+
+      penalties =
+        if remaining == 0 do
+          Map.delete(game.penalties, player_id)
+        else
+          Map.put(game.penalties, player_id, remaining)
+        end
+
+      status = if remaining > 0, do: :continue, else: :complete
+      {:ok, %{game | penalties: penalties}, status}
+
+    _ ->
+      {:ok, game, playable_card?(drawn_card, game.top_card)}
   end
+end
 
   defp deck_empty(game) do
     game.deck == []
@@ -492,6 +492,19 @@ defmodule Uno.Game.Logic do
   defp add_to_hand(game, player_id, card) do
     new_hand = [card | Map.get(game.hands, player_id, [])]
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
+  end
+
+  # GL-14
+  @spec accept_chain(t(), player_id()) :: {:ok, t()} | {:error, :no_active_chain}
+  def accept_chain(%__MODULE__{chain: nil}, _player_id), do: {:error, :no_active_chain}
+
+  def accept_chain(%__MODULE__{chain: %{amount: amount}} = game, player_id) do
+    penalties =
+      Map.update(game.penalties, player_id, amount, fn existing ->
+        existing + amount
+      end)
+
+    {:ok, %{game | penalties: penalties, chain: nil}}
   end
 
   # GL-15
