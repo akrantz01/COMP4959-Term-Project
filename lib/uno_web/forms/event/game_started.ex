@@ -29,4 +29,8 @@ defmodule UnoWeb.Forms.Event.GameStarted do
       game_id: form.game_id
     }
   end
+
+  @impl true
+  def from_event(%Uno.Events.GameStarted{} = e),
+    do: %{"game_id" => e.game_id}
 end

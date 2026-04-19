@@ -55,6 +55,20 @@ defmodule Uno.Events do
           }
   end
 
+  defmodule AdminChanged do
+    @moduledoc """
+    Added by Aarshdeep Vandal:
+    The room has re-assigned the admin status to a new player
+    """
+
+    @enforce_keys [:new_admin_id]
+    defstruct [:new_admin_id]
+
+    @type t :: %__MODULE__{
+            new_admin_id: String.t() | nil
+          }
+  end
+
   defmodule GameStarted do
     @moduledoc """
     The game was started by the room admin
@@ -88,9 +102,10 @@ defmodule Uno.Events do
     Synchronize the current game state with all the clients.
     """
 
-    @enforce_keys [:sequence, :top_card, :direction, :hands, :players]
+    @enforce_keys [:sequence, :current_player_id, :top_card, :direction, :hands, :players]
     defstruct [
       :sequence,
+      :current_player_id,
       :top_card,
       :direction,
       :hands,
@@ -101,6 +116,7 @@ defmodule Uno.Events do
 
     @type t :: %__MODULE__{
             sequence: non_neg_integer(),
+            current_player_id: Uno.Events.player_id(),
             top_card: Uno.Events.played_card(),
             direction: Uno.Events.direction(),
             hands: %{String.t() => %{Uno.Events.hand_card() => non_neg_integer()}},

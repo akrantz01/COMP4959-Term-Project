@@ -21,4 +21,9 @@ defmodule UnoWeb.Forms.Chain do
 
   def format(nil), do: nil
   def format(%__MODULE__{type: type, amount: amount}), do: %{type: type, amount: amount}
+
+  def unformat(nil), do: nil
+
+  def unformat(%{type: type, amount: amount}),
+    do: %{"type" => to_string(type), "amount" => amount}
 end

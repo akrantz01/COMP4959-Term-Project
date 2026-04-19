@@ -12,6 +12,7 @@ defmodule UnoWeb.Forms.Event.Sync do
   @primary_key false
   embedded_schema do
     field :sequence, :integer, default: 0
+    field :current_player_id, :string
     field :direction, Ecto.Enum, values: [:ltr, :rtl], default: :ltr
     field :vulnerable_player_id, :string
 
@@ -30,9 +31,10 @@ defmodule UnoWeb.Forms.Event.Sync do
   @impl true
   def changeset(sync \\ %__MODULE__{}, attrs) do
     sync
-    |> cast(attrs, [:sequence, :direction, :vulnerable_player_id, :has_chain])
-    |> validate_required([:sequence, :direction])
+    |> cast(attrs, [:sequence, :current_player_id, :direction, :vulnerable_player_id, :has_chain])
+    |> validate_required([:sequence, :current_player_id, :direction])
     |> validate_number(:sequence, greater_than_or_equal_to: 0)
+    |> validate_format(:current_player_id, ~r/^[a-zA-Z0-9]+$/, message: "must be alphanumeric")
     |> validate_format(:vulnerable_player_id, ~r/^[a-zA-Z0-9]+$/, message: "must be alphanumeric")
     |> cast_embed(:top_card, with: &Card.played_changeset/2, required: true)
     |> cast_embed(:chain)
@@ -44,6 +46,7 @@ defmodule UnoWeb.Forms.Event.Sync do
   def to_event(%__MODULE__{} = form) do
     %Uno.Events.Sync{
       sequence: form.sequence,
+      current_player_id: form.current_player_id,
       direction: form.direction,
       vulnerable_player_id: form.vulnerable_player_id,
       top_card: Card.format(:played, form.top_card),
@@ -55,5 +58,32 @@ defmodule UnoWeb.Forms.Event.Sync do
            Map.new(hand.cards, fn card -> {Card.format(:hand, card), card.count} end)}
         end)
     }
+  end
+
+  @impl true
+  def from_event(%Uno.Events.Sync{} = e) do
+    params = %{
+      "sequence" => e.sequence,
+      "current_player_id" => e.current_player_id,
+      "direction" => to_string(e.direction),
+      "vulnerable_player_id" => e.vulnerable_player_id,
+      "top_card" => Card.unformat(:played, e.top_card),
+      "players" => Enum.map(e.players, fn {id, name} -> %{"id" => id, "name" => name} end),
+      "hands" =>
+        Enum.map(e.hands, fn {player_id, cards} ->
+          %{
+            "player_id" => player_id,
+            "cards" =>
+              Enum.map(cards, fn {card, count} ->
+                Card.unformat(:hand, card) |> Map.put("count", count)
+              end)
+          }
+        end)
+    }
+
+    case e.chain do
+      nil -> Map.put(params, "has_chain", false)
+      chain -> params |> Map.put("has_chain", true) |> Map.put("chain", Chain.unformat(chain))
+    end
   end
 end
