@@ -41,23 +41,33 @@ defmodule UnoWeb.RoomLive do
     end
   end
 
+  def handle_event("update_name", %{"player_name" => player_name}, socket) do
+    _ = Uno.Room.name(socket.assigns.room_id, socket.assigns.player_id, player_name)
+    {:noreply, socket}
+  end
+
+  def handle_event("start_game", _params, socket) do
+    _ = Uno.Room.start(socket.assigns.room_id, socket.assigns.player_id)
+    {:noreply, socket}
+  end
+
   # --- end temporary ---
 
   # --- Handle Pub/Sub events
 
   def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
-    # TODO: subscribe to game channel
     {:noreply, assign(socket, state: :game)}
   end
 
   def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
-    # TODO: unsubscribe from game channel
     {:noreply, assign(socket, state: :lobby)}
   end
 
   @forwarded_events %{
     Events.PlayerJoined => :room,
     Events.PlayerLeft => :room,
+    Events.AdminChanged => :room,
+    Events.GameEnded => :room,
     Events.Sync => :game,
     Events.NextTurn => :game,
     Events.CardsPlayed => :game,
@@ -65,14 +75,15 @@ defmodule UnoWeb.RoomLive do
   }
 
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
-    with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]),
-         do: send_update(component, id: id, event: msg)
+    with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]) do
+      send_update(component, id: id, event: msg)
+    end
 
     {:noreply, socket}
   end
 
   defp component_target(state, :both), do: component_target(state, state)
-  defp component_target(:room, :room), do: {RoomComponent, "lobby"}
+  defp component_target(:lobby, :room), do: {LobbyComponent, "lobby"}
   defp component_target(:game, :game), do: {GameComponent, "game"}
   defp component_target(_state, _spec), do: nil
 end

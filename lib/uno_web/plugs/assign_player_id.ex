@@ -1,7 +1,8 @@
 defmodule UnoWeb.Plugs.AssignPlayerId do
   @moduledoc """
-  assign an player id in cookie
+  Assign a player id in cookie and session.
   """
+
   import Plug.Conn
 
   def init(opts), do: opts
