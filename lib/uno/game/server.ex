@@ -14,6 +14,7 @@ defmodule Uno.Game.Server do
   @broadcast_delay 200
   @disconnect_timeout 60_000
   @inactivity_timeout 30_000
+  @uno_grace_period 500
 
   @doc """
   Starts the GenServer with the given room ID and player list.
@@ -102,9 +103,6 @@ defmodule Uno.Game.Server do
     end
   end
 
-  # UNO call grace period expiring
-  defp expire_uno_call_buffer(state, _player_id, _sequence_number), do: state
-
   # -------------------- Server Callbacks --------------------
 
   @impl true
@@ -118,10 +116,10 @@ defmodule Uno.Game.Server do
       room_id: room_id,
       logic_state: initial_logic_state,
       auto_play_set: MapSet.new(),
-      timers: %{},
       chain: nil,
       broadcast_queue: :queue.new(),
-      broadcast_pending: false
+      broadcast_pending: false,
+      vulnerable_players: %{}
     }
 
     {:ok, server_state}
@@ -164,6 +162,7 @@ defmodule Uno.Game.Server do
       {:ok, new_logic} ->
         player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
+        new_state = mark_vulnerability(new_state, player_id, player_hand)
 
         new_state = broadcast_cards_played(new_state, player_id, cards, player_hand)
 
@@ -219,8 +218,54 @@ defmodule Uno.Game.Server do
   end
 
   @impl true
-  def handle_call({:uno, _player_id}, _from, state) do
-    {:reply, :ok, state}
+  def handle_call({:uno, player_id}, _from, state) do
+    case state.logic_state do
+      nil ->
+        {:reply, {:error, :game_not_started}, state}
+
+      logic ->
+        handle_uno_call(state, player_id, logic)
+    end
+  end
+
+  defp handle_uno_call(state, player_id, logic) do
+    vulnerable_player_id = logic.vulnerable_player_id
+
+    if vulnerable_player_id != nil and vulnerable_player_id != player_id do
+      handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id)
+    else
+      process_uno_call(state, player_id)
+    end
+  end
+
+  defp handle_uno_with_vulnerable(state, player_id, logic, vulnerable_player_id) do
+    case Map.get(state.vulnerable_players, vulnerable_player_id) do
+      vulnerable_timestamp when is_integer(vulnerable_timestamp) ->
+        current_time = System.monotonic_time(:millisecond)
+        delay = vulnerable_timestamp + @uno_grace_period - current_time
+
+        if delay > 0 do
+          Process.send_after(self(), {:uno_call_buffer, player_id, logic.sequence}, delay)
+          {:reply, :ok, state}
+        else
+          process_uno_call(state, player_id)
+        end
+
+      _ ->
+        process_uno_call(state, player_id)
+    end
+  end
+
+  defp process_uno_call(state, player_id) do
+    {:ok, updated_logic, penalties_map} = Logic.uno(state.logic_state, player_id)
+
+    new_state =
+      state
+      |> Map.put(:logic_state, updated_logic)
+      |> sync_vulnerability(updated_logic)
+      |> resolve_penalties(penalties_map)
+
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -241,7 +286,13 @@ defmodule Uno.Game.Server do
 
   @impl true
   def handle_info({:uno_call_buffer, player_id, sequence_number}, state) do
-    {:noreply, expire_uno_call_buffer(state, player_id, sequence_number)}
+    case state.logic_state do
+      nil ->
+        {:noreply, state}
+
+      logic ->
+        handle_uno_call_buffer(state, player_id, logic, sequence_number)
+    end
   end
 
   # GS-11: Drains one event from the broadcast queue; reschedules if more remain.
@@ -263,6 +314,18 @@ defmodule Uno.Game.Server do
 
   # -------------------- Private Helpers --------------------
 
+  defp handle_uno_call_buffer(state, player_id, logic, sequence_number) do
+    vulnerable_player = logic.vulnerable_player_id
+
+    if logic.sequence == sequence_number and vulnerable_player != nil do
+      case process_uno_call(state, player_id) do
+        {:reply, _response, new_state} -> {:noreply, new_state}
+      end
+    else
+      {:noreply, state}
+    end
+  end
+
   # GS-14: Schedules an inactivity timeout for the current player if they are not in auto_play_set.
   # The sequence number is embedded so stale timer fires are no-ops in inactivity_timeout/3.
   @spec start_inactivity_timer(map()) :: map()
@@ -282,6 +345,43 @@ defmodule Uno.Game.Server do
 
     state
   end
+
+  defp mark_vulnerability(state, player_id, player_hand) do
+    vulnerable_players =
+      if Enum.count(player_hand) == 1 do
+        %{player_id => System.monotonic_time(:millisecond)}
+      else
+        %{}
+      end
+
+    %{state | vulnerable_players: vulnerable_players}
+  end
+
+  defp sync_vulnerability(state, updated_logic) do
+    vulnerable_players =
+      case updated_logic.vulnerable_player_id do
+        nil -> %{}
+        player_id -> Map.take(state.vulnerable_players, [player_id])
+      end
+
+    %{state | vulnerable_players: vulnerable_players}
+  end
+
+  defp resolve_penalties(state, penalties) do
+    Enum.reduce(penalties, state, fn {player_id, count}, acc ->
+      draw_penalty_cards(acc, player_id, count)
+    end)
+  end
+
+  defp draw_penalty_cards(state, player_id, count) when count > 0 do
+    {:ok, new_logic, drawn_card, _playable?} = Logic.draw_card(state.logic_state, player_id)
+    new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+    new_state = %{state | logic_state: new_logic}
+    new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
+    draw_penalty_cards(new_state, player_id, count - 1)
+  end
+
+  defp draw_penalty_cards(state, _player_id, 0), do: state
 
   # GS-15: Draws one card at a time until the drawn card is playable, then plays it.
   @spec draw_until_playable(map(), Logic.player_id()) :: map()
@@ -309,6 +409,8 @@ defmodule Uno.Game.Server do
       {:ok, new_logic} ->
         player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
+        new_state = mark_vulnerability(new_state, player_id, player_hand)
+
         new_state = broadcast_cards_played(new_state, player_id, cards, player_hand)
 
         if Enum.empty?(player_hand) do
