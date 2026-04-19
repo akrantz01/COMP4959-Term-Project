@@ -287,7 +287,7 @@ defmodule Uno.Game.Server do
     end
   end
 
-   defp handle_uno_call(state, player_id, logic) do
+  defp handle_uno_call(state, player_id, logic) do
     vulnerable_player_id = logic.vulnerable_player_id
 
     if vulnerable_player_id != nil and vulnerable_player_id != player_id do
@@ -325,7 +325,7 @@ defmodule Uno.Game.Server do
           |> merge_penalties(penalties_map)
           |> resolve_pending_penalties()
 
-    {:reply, :ok, new_state}
+        {:reply, :ok, new_state}
     end
   end
 
