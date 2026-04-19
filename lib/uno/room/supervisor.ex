@@ -26,7 +26,7 @@ defmodule Uno.Room.Supervisor do
     `{:error, :room_id_taken}` if the room ID is already in use
   """
   def start_room(room_id \\ Nanoid.generate(5)) do
-    case Registry.lookup(Uno.RoomRegistry, room_id) do
+    case Registry.lookup(Uno.Room.Registry, room_id) do
       [] ->
         case DynamicSupervisor.start_child(__MODULE__, {Room, room_id}) do
           {:ok, pid} -> {:ok, room_id, pid}
@@ -47,7 +47,7 @@ defmodule Uno.Room.Supervisor do
     `{:error, :room_not_found}` if no room with the given ID exists.
   """
   def stop_room(room_id) do
-    case Registry.lookup(Uno.RoomRegistry, room_id) do
+    case Registry.lookup(Uno.Room.Registry, room_id) do
       [{pid, _value}] -> DynamicSupervisor.terminate_child(__MODULE__, pid)
       [] -> {:error, :room_not_found}
     end

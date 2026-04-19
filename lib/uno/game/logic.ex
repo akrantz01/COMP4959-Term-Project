@@ -179,11 +179,13 @@ defmodule Uno.Game.Logic do
       game =
         game
         |> remove_all_from_hand(player_id, played_cards)
+        |> mark_vulnerable_player(player_id)
         |> Map.put(:top_card, List.last(played_cards))
         |> Map.put(:direction, new_direction)
         |> Map.put(:chain, new_chain)
         |> Map.put(:sequence, game.sequence + 1)
         |> advance_turn_steps(1 + skip_count)
+        |> Map.put(:vulnerable_player_id, nil)
 
       {:ok, game}
     end
@@ -292,6 +294,15 @@ defmodule Uno.Game.Logic do
       end)
 
     %{game | hands: Map.put(game.hands, player_id, updated_hand)}
+  end
+
+  @spec mark_vulnerable_player(t(), player_id()) :: t()
+  defp mark_vulnerable_player(game, player_id) do
+    if Map.get(game.hands, player_id, []) |> length() <= 1 do
+      Map.put(game, :vulnerable_player_id, player_id)
+    else
+      game
+    end
   end
 
   # Advances the turn by one player, based on the current direction.
@@ -478,6 +489,19 @@ defmodule Uno.Game.Logic do
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
   end
 
+  # GL-14
+  @spec accept_chain(t(), player_id()) :: {:ok, t()} | {:error, :no_active_chain}
+  def accept_chain(%__MODULE__{chain: nil}, _player_id), do: {:error, :no_active_chain}
+
+  def accept_chain(%__MODULE__{chain: %{amount: amount}} = game, player_id) do
+    penalties =
+      Map.update(game.penalties, player_id, amount, fn existing ->
+        existing + amount
+      end)
+
+    {:ok, %{game | penalties: penalties, chain: nil}}
+  end
+
   # GL-15
   @spec skip(t(), player_id()) ::
           {:ok, t(), player_id(), penalties()} | {:error, :not_your_turn}
@@ -492,14 +516,37 @@ defmodule Uno.Game.Logic do
     end
   end
 
-  # TODO: Temp stub
-  @spec uno(t(), player_id()) ::
-          {:ok, t(), %{player_id() => non_neg_integer()}} | {:error, atom()}
-  def uno(game, player_id) do
-    if player_id do
-      {:ok, game, %{}}
-    else
-      {:error, :invalid_player_id}
-    end
+  # GL-16
+  @spec uno(t(), player_id()) :: {:ok, t(), penalties()}
+  def uno(game, _player_id) do
+    current_player_id = current_turn(game)
+    vulnerable_player_id = game.vulnerable_player_id
+
+    penalized_player_id =
+      cond do
+        is_nil(vulnerable_player_id) -> current_player_id
+        vulnerable_player_id == current_player_id -> nil
+        true -> vulnerable_player_id
+      end
+
+    updated_penalties =
+      case penalized_player_id do
+        nil -> game.penalties
+        target_player_id -> Map.update(game.penalties, target_player_id, 1, &(&1 + 1))
+      end
+
+    updated_game =
+      game
+      |> Map.put(:penalties, updated_penalties)
+      |> Map.put(:vulnerable_player_id, nil)
+
+    {:ok, updated_game, updated_penalties}
+  end
+
+  # GL-19
+  # Doesn't handle errors if a player isn't found
+  @spec has_won(t(), player_id()) :: boolean()
+  def has_won(game, player_id) do
+    game.hands[player_id] == []
   end
 end
