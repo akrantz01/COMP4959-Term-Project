@@ -19,7 +19,7 @@ defmodule UnoWeb.CoreComponents do
       we build on. You will use it for layout, sizing, flexbox, grid, and
       spacing.
 
-    * [Heroicons](https://heroicons.com) - see `icon/1` for usage.
+    * [FontAwesome](https://fontawesome.com) - see `icon/1` for usage.
 
     * [Phoenix.Component](https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html) -
       the component system used by Phoenix. Some components, such as `<.link>`
@@ -64,15 +64,15 @@ defmodule UnoWeb.CoreComponents do
         @kind == :info && "alert-info",
         @kind == :error && "alert-error"
       ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :info} name="fas-circle-info" class="size-5 shrink-0" />
+        <.icon :if={@kind == :error} name="fas-circle-exclamation" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </div>
         <div class="flex-1" />
         <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+          <.icon name="fas-xmark" class="size-5 opacity-40 group-hover:opacity-70" />
         </button>
       </div>
     </div>
@@ -302,7 +302,7 @@ defmodule UnoWeb.CoreComponents do
   defp error(assigns) do
     ~H"""
     <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
-      <.icon name="hero-exclamation-circle" class="size-5" />
+      <.icon name="fas-circle-exclamation" class="size-5" />
       {render_slot(@inner_block)}
     </p>
     """
@@ -422,27 +422,29 @@ defmodule UnoWeb.CoreComponents do
   end
 
   @doc """
-  Renders a [Heroicon](https://heroicons.com).
+  Renders a [Font Awesome](https://fontawesome.com) Free icon.
 
-  Heroicons come in three styles – outline, solid, and mini.
-  By default, the outline style is used, but solid and mini may
-  be applied by using the `-solid` and `-mini` suffix.
+  Font Awesome icons come in three styles – solid, regular, and brand.
 
   You can customize the size and colors of the icons by setting
   width, height, and background color classes.
 
-  Icons are extracted from the `deps/heroicons` directory and bundled within
-  your compiled app.css by the plugin in `assets/vendor/heroicons.js`.
+  Icons are extracted from the `deps/fontawesome` directory and bundled within
+  your compiled app.css by the plugin in `assets/vendor/fontawesome.js`.
 
   ## Examples
 
-      <.icon name="hero-x-mark" />
-      <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
+      <.icon name="fas-xmark" />
+      <.icon name="fas-arrows-rotate" class="ml-1 size-3 motion-safe:animate-spin" />
   """
   attr :name, :string, required: true
   attr :class, :any, default: "size-4"
 
-  def icon(%{name: "hero-" <> _} = assigns) do
+  def icon(%{name: "fas-" <> _} = assigns), do: render_icon(assigns)
+  def icon(%{name: "far-" <> _} = assigns), do: render_icon(assigns)
+  def icon(%{name: "fab-" <> _} = assigns), do: render_icon(assigns)
+
+  defp render_icon(assigns) do
     ~H"""
     <span class={[@name, @class]} />
     """

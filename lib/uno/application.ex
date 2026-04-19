@@ -19,7 +19,7 @@ defmodule Uno.Application do
       # Room Supervisor and Registry
       {Registry, keys: :unique, name: Uno.Room.Registry},
       Uno.Room.Supervisor,
-
+      {DynamicSupervisor, name: Uno.Game.DynamicSupervisor, strategy: :one_for_one},
       # Start a worker by calling: Uno.Worker.start_link(arg)
       # {Uno.Worker, arg},
       # Start to serve requests, typically the last entry

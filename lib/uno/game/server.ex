@@ -20,7 +20,11 @@ defmodule Uno.Game.Server do
   Starts the GenServer with the given room ID and player list.
   """
   def start_link(room_id, player_ids) do
-    GenServer.start_link(__MODULE__, {room_id, player_ids})
+    GenServer.start_link(__MODULE__, {room_id, player_ids}, name: via_tuple(room_id))
+  end
+
+  defp via_tuple(room_id) do
+    {:via, Registry, {Uno.Game.Registry, room_id}}
   end
 
   # -------------------- APIs --------------------
@@ -179,13 +183,38 @@ defmodule Uno.Game.Server do
   end
 
   @impl true
-  def handle_call({:draw, _player_id}, _from, state) do
-    {:reply, :ok, state}
+  def handle_call({:draw, player_id}, _from, state) do
+    case draw_loop(state.logic_state, player_id, []) do
+      {:ok, updated_logic, drawn_cards} ->
+        # Broadcast events for each drawn card
+        Enum.each(drawn_cards, fn card ->
+          PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:card_drawn, player_id, card})
+        end)
+
+        updated_state = %{state | logic_state: updated_logic}
+
+        {:reply, {:ok, drawn_cards}, updated_state}
+    end
   end
 
   @impl true
-  def handle_call({:accept_chain, _player_id}, _from, state) do
-    {:reply, :ok, state}
+  def handle_call({:accept_chain, player_id}, _from, state) do
+    case Logic.accept_chain(state.logic_state, player_id) do
+      {:ok, updated_logic} ->
+        Enum.each(updated_logic.penalties, fn {affected_player_id, penalty_count} ->
+          PubSub.broadcast(
+            Uno.PubSub,
+            "game:#{state.room_id}",
+            {:penalty_assigned, affected_player_id, penalty_count}
+          )
+        end)
+
+        updated_state = %{state | logic_state: updated_logic}
+        {:reply, :ok, updated_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
   end
 
   @impl true
@@ -228,19 +257,15 @@ defmodule Uno.Game.Server do
   end
 
   defp process_uno_call(state, player_id) do
-    case Logic.uno(state.logic_state, player_id) do
-      {:ok, updated_logic, penalties_map} ->
-        new_state =
-          state
-          |> Map.put(:logic_state, updated_logic)
-          |> sync_vulnerability(updated_logic)
-          |> resolve_penalties(penalties_map)
+    {:ok, updated_logic, penalties_map} = Logic.uno(state.logic_state, player_id)
 
-        {:reply, :ok, new_state}
+    new_state =
+      state
+      |> Map.put(:logic_state, updated_logic)
+      |> sync_vulnerability(updated_logic)
+      |> resolve_penalties(penalties_map)
 
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
-    end
+    {:reply, :ok, new_state}
   end
 
   @impl true
@@ -349,9 +374,8 @@ defmodule Uno.Game.Server do
   end
 
   defp draw_penalty_cards(state, player_id, count) when count > 0 do
-    {:ok, new_logic, _playable?} = Logic.draw_card(state.logic_state, player_id)
+    {:ok, new_logic, drawn_card, _playable?} = Logic.draw_card(state.logic_state, player_id)
     new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
-    drawn_card = hd(new_hand)
     new_state = %{state | logic_state: new_logic}
     new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
     draw_penalty_cards(new_state, player_id, count - 1)
@@ -362,7 +386,7 @@ defmodule Uno.Game.Server do
   # GS-15: Draws one card at a time until the drawn card is playable, then plays it.
   @spec draw_until_playable(map(), Logic.player_id()) :: map()
   defp draw_until_playable(state, player_id) do
-    {:ok, new_logic, playable?} = Logic.draw_card(state.logic_state, player_id)
+    {:ok, new_logic, _drawn, playable?} = Logic.draw_card(state.logic_state, player_id)
     new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
     drawn_card = hd(new_hand)
     new_state = %{state | logic_state: new_logic}
@@ -514,5 +538,15 @@ defmodule Uno.Game.Server do
       skipped: skipped,
       chain: state.chain
     })
+  end
+
+  defp draw_loop(logic_state, player_id, cards_drawn) do
+    case Logic.draw_card(logic_state, player_id) do
+      {:ok, updated_logic, drawn_card, true} ->
+        {:ok, updated_logic, cards_drawn ++ [drawn_card]}
+
+      {:ok, updated_logic, drawn_card, _playable} ->
+        draw_loop(updated_logic, player_id, cards_drawn ++ [drawn_card])
+    end
   end
 end

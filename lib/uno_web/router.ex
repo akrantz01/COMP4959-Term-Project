@@ -8,6 +8,7 @@ defmodule UnoWeb.Router do
     plug :put_root_layout, html: {UnoWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug UnoWeb.Plugs.AssignPlayerId
   end
 
   pipeline :api do
@@ -18,7 +19,7 @@ defmodule UnoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    live "/room/:id", RoomLive
+    live "/room/:room_id", RoomLive
   end
 
   # Other scopes may use custom stacks.
