@@ -450,7 +450,7 @@ defmodule Uno.Game.Logic do
   end
 
   # GL-12
-  @spec draw_card(t(), player_id()) :: {:ok, t(), boolean()}
+  @spec draw_card(t(), player_id()) :: {:ok, t(), hand_card(), boolean()}
   def draw_card(game, player_id) do
     game =
       if deck_empty(game) do
@@ -466,7 +466,7 @@ defmodule Uno.Game.Logic do
       |> Map.put(:deck, remaining_deck)
       |> add_to_hand(player_id, drawn_card)
 
-    {:ok, game, playable_card?(drawn_card, game.top_card)}
+    {:ok, game, drawn_card, playable_card?(drawn_card, game.top_card)}
   end
 
   defp deck_empty(game) do
@@ -476,6 +476,19 @@ defmodule Uno.Game.Logic do
   defp add_to_hand(game, player_id, card) do
     new_hand = [card | Map.get(game.hands, player_id, [])]
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
+  end
+
+  # GL-14
+  @spec accept_chain(t(), player_id()) :: {:ok, t()} | {:error, :no_active_chain}
+  def accept_chain(%__MODULE__{chain: nil}, _player_id), do: {:error, :no_active_chain}
+
+  def accept_chain(%__MODULE__{chain: %{amount: amount}} = game, player_id) do
+    penalties =
+      Map.update(game.penalties, player_id, amount, fn existing ->
+        existing + amount
+      end)
+
+    {:ok, %{game | penalties: penalties, chain: nil}}
   end
 
   # GL-15
@@ -489,17 +502,6 @@ defmodule Uno.Game.Logic do
         |> advance_turn()
 
       {:ok, game, current_turn(game), game.penalties}
-    end
-  end
-
-  # TODO: temp stub to allow server to compile
-  @spec accept_chain(t(), player_id()) ::
-          {:ok, t(), %{player_id() => non_neg_integer()}} | {:error, atom()}
-  def accept_chain(game, player_id) do
-    if player_id do
-      {:ok, game, %{}}
-    else
-      {:error, :invalid_player_id}
     end
   end
 end

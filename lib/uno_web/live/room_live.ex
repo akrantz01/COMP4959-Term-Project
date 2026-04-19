@@ -5,17 +5,20 @@ defmodule UnoWeb.RoomLive do
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
-  def mount(%{"id" => id}, _session, socket) do
-    # TODO: remove once room and game exist
-    PubSub.subscribe({:room, id})
-    PubSub.subscribe({:game, id})
-
-    # TODO: retrieve from session
-    player_id = Nanoid.generate()
+  def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
+    # TODO: remove once more is implemented in favour of room lookup
+    if connected?(socket) do
+      PubSub.subscribe({:room, room_id})
+      PubSub.subscribe({:game, room_id})
+    end
 
     {:ok,
      socket
-     |> assign(room_id: id, player_id: player_id, state: :lobby)
+     |> assign(
+       room_id: room_id,
+       player_id: player_id,
+       state: :lobby
+     )
      |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
   end
 
@@ -40,11 +43,21 @@ defmodule UnoWeb.RoomLive do
 
   # --- end temporary ---
 
+  # --- Handle Pub/Sub events
+
+  def handle_info(%Uno.Events.GameStarted{game_id: _game_id}, socket) do
+    # TODO: subscribe to game channel
+    {:noreply, assign(socket, state: :game)}
+  end
+
+  def handle_info(%Uno.Events.GameEnded{winner_id: _winner_id}, socket) do
+    # TODO: unsubscribe from game channel
+    {:noreply, assign(socket, state: :lobby)}
+  end
+
   @forwarded_events %{
     Events.PlayerJoined => :room,
     Events.PlayerLeft => :room,
-    Events.GameStarted => :room,
-    Events.GameEnded => :room,
     Events.Sync => :game,
     Events.NextTurn => :game,
     Events.CardsPlayed => :game,

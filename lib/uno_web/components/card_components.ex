@@ -106,6 +106,7 @@ defmodule UnoWeb.CardComponents do
 
   attr :card, :any, required: true
   attr :selectable, :boolean, default: true
+  attr :disabled, :boolean, default: false
   attr :size, :atom, values: ~w(md lg)a, default: :md
   attr :class, :string, default: nil
   attr :rest, :global
@@ -122,7 +123,8 @@ defmodule UnoWeb.CardComponents do
         color: color,
         c: c,
         value: value,
-        corner: label(value)
+        corner: label(value),
+        selectable: assigns.selectable && !assigns.disabled
       )
 
     ~H"""
@@ -134,6 +136,7 @@ defmodule UnoWeb.CardComponents do
         "shadow-[0_2px_4px_rgba(0,0,0,0.3),0_6px_16px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
         @selectable &&
           "cursor-pointer hover:-translate-y-2 hover:scale-103 hover:shadow-[0_12px_28px_rgba(0,0,0,0.35),0_4px_8px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.15)]",
+        @disabled && "opacity-50 cursor-not-allowed",
         if(@wild?, do: "bg-[#1a1a1a]", else: @c.bg),
         @played? && @c.glow,
         @played? && ["border-4", @c.border],
