@@ -478,6 +478,19 @@ defmodule Uno.Game.Logic do
     %{game | hands: Map.put(game.hands, player_id, new_hand)}
   end
 
+  # GL-14
+  @spec accept_chain(t(), player_id()) :: {:ok, t()} | {:error, :no_active_chain}
+  def accept_chain(%__MODULE__{chain: nil}, _player_id), do: {:error, :no_active_chain}
+
+  def accept_chain(%__MODULE__{chain: %{amount: amount}} = game, player_id) do
+    penalties =
+      Map.update(game.penalties, player_id, amount, fn existing ->
+        existing + amount
+      end)
+
+    {:ok, %{game | penalties: penalties, chain: nil}}
+  end
+
   # GL-15
   @spec skip(t(), player_id()) ::
           {:ok, t(), player_id(), penalties()} | {:error, :not_your_turn}
