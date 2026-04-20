@@ -1,16 +1,14 @@
 defmodule UnoWeb.PageController do
   use UnoWeb, :controller
 
+  alias Uno.Room
+
   def home(conn, _params) do
     render(conn, :home)
   end
 
   def create_room(conn, _params) do
-    room_id =
-      :crypto.strong_rand_bytes(4)
-      |> Base.url_encode64(padding: false)
-      |> binary_part(0, 6)
-      |> String.upcase()
+    {:ok, room_id, _pid} = Room.Supervisor.start_room()
 
     redirect(conn, to: "/room/#{room_id}")
   end
