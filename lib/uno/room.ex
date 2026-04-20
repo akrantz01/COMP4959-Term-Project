@@ -131,6 +131,9 @@ defmodule Uno.Room do
   @impl true
   @spec init(Events.room_id()) :: {:ok, state()}
   def init(room_id) do
+    # Tell the Room to listen to all events broadcast by its Game process
+    Uno.PubSub.subscribe({:game, room_id})
+
     {:ok, %__MODULE__{room_id: room_id}}
   end
 
