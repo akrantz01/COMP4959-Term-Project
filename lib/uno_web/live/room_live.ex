@@ -41,16 +41,6 @@ defmodule UnoWeb.RoomLive do
     end
   end
 
-  def handle_event("update_name", %{"player_name" => player_name}, socket) do
-    _ = Uno.Room.name(socket.assigns.room_id, socket.assigns.player_id, player_name)
-    {:noreply, socket}
-  end
-
-  def handle_event("start_game", _params, socket) do
-    _ = Uno.Room.start(socket.assigns.room_id, socket.assigns.player_id)
-    {:noreply, socket}
-  end
-
   # --- end temporary ---
 
   # --- Handle Pub/Sub events

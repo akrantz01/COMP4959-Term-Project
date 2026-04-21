@@ -67,6 +67,16 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
     {:ok, assign(socket, assigns)}
   end
 
+  def handle_event("update_name", %{"player_name" => player_name}, socket) do
+    _ = Uno.Room.name(socket.assigns.room_id, socket.assigns.player_id, player_name)
+    {:noreply, socket}
+  end
+
+  def handle_event("start_game", _params, socket) do
+    _ = Uno.Room.start(socket.assigns.room_id, socket.assigns.player_id)
+    {:noreply, socket}
+  end
+
   defp maybe_update_player_name(socket, %{player_id: player_id, name: name}) do
     update(socket, :player_name, fn previous_name ->
       if(player_id == socket.assigns.player_id, do: name, else: previous_name)
