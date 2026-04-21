@@ -298,6 +298,11 @@ defmodule Uno.Room do
     {:stop, :normal, state}
   end
 
+  @ignored_events [Events.Sync, Events.NextTurn, Events.CardsDrawn, Events.CardsPlayed]
+
+  @impl true
+  def handle_info(%mod{}, state) when mod in @ignored_events, do: {:noreply, state}
+
   defp admit?(%{state: :lobby}, _player_id), do: :ok
 
   defp admit?(%{state: :in_game, players: players}, player_id) do
