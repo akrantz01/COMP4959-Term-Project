@@ -42,17 +42,28 @@ defmodule UnoWeb.RoomLive do
 
   defp connect_to_room(%{assigns: %{room_id: room_id, player_id: player_id}} = socket) do
     if connected?(socket) do
-      case Room.join(room_id, player_id) do
+      case join_room(room_id, player_id) do
         {:ok, snapshot} ->
           PubSub.subscribe({:room, room_id})
           PubSub.subscribe({:game, room_id})
           assign(socket, snapshot)
+
+        {:error, :not_found} ->
+          socket |> put_flash(:error, "Room not found!") |> redirect(to: "/")
 
         {:error, :room_not_in_lobby} ->
           socket |> put_flash(:error, "Game has already started!") |> redirect(to: "/")
       end
     else
       assign(socket, state: :loading, players: [])
+    end
+  end
+
+  defp join_room(room_id, player_id) do
+    try do
+      Room.join(room_id, player_id)
+    catch
+      :exit, {:noproc, _} -> {:error, :not_found}
     end
   end
 
