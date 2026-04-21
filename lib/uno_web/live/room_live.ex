@@ -10,6 +10,7 @@ defmodule UnoWeb.RoomLive do
       if connected?(socket) do
         {:ok, snapshot} = Room.join(room_id, player_id)
         PubSub.subscribe({:room, room_id})
+        PubSub.subscribe({:game, room_id})
         snapshot
       else
         %{state: :loading, players: []}

@@ -71,6 +71,13 @@ defmodule Uno.Game.Server do
     GenServer.call(server, {:uno, player_id})
   end
 
+  @doc """
+  Returns the full game state as an `Events.Sync` struct.
+  """
+  def snapshot(room_id) do
+    GenServer.call(via_tuple(room_id), :snapshot)
+  end
+
   # -------------------- Event Handlers --------------------
 
   # GS-14: Fires when a player's 30s inactivity timer expires.
@@ -215,6 +222,11 @@ defmodule Uno.Game.Server do
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
+  end
+
+  @impl true
+  def handle_call(:snapshot, _from, state) do
+    {:reply, build_sync(state), state}
   end
 
   @impl true

@@ -11,6 +11,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
       {:ok,
        socket
        |> assign(
+         room_id: nil,
          sequence: 0,
          hand: %{},
          opponents: [],
@@ -150,18 +151,21 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event("dismiss_card_animation", _params, socket), do: {:noreply, socket}
 
   def update(%{event: %Uno.Events.NextTurn{} = event}, socket) do
-    # TODO: validate sequence number
-    {:ok,
-     assign(socket,
-       sequence: event.sequence,
-       turn_player_id: event.player_id,
-       turn_skipped: event.skipped,
-       top_card: event.top_card,
-       direction: event.direction,
-       vulnerable_player_id: event.vulnerable_player_id,
-       chain: event.chain,
-       uno_called: false
-     )}
+    if event.sequence <= socket.assigns.sequence do
+      {:ok, socket}
+    else
+      {:ok,
+       assign(socket,
+         sequence: event.sequence,
+         turn_player_id: event.player_id,
+         turn_skipped: event.skipped,
+         top_card: event.top_card,
+         direction: event.direction,
+         vulnerable_player_id: event.vulnerable_player_id,
+         chain: event.chain,
+         uno_called: false
+       )}
+    end
   end
 
   def update(%{event: %Uno.Events.CardsPlayed{} = event}, socket) do
@@ -192,7 +196,27 @@ defmodule UnoWeb.RoomLive.GameComponent do
      |> enqueue_card_animation(%{kind: :drawn, actor_id: event.player_id, cards: cards})}
   end
 
-  def update(%{event: %Uno.Events.Sync{} = event}, %{assigns: %{player_id: player_id}} = socket) do
+  def update(%{event: %Uno.Events.Sync{} = event}, socket) do
+    {:ok, apply_sync(socket, event)}
+  end
+
+  # Assign directly passed in properties. On first delivery (room_id was nil),
+  # pull the authoritative game state — clients don't receive an initial Sync
+  # broadcast, so they populate themselves synchronously from the Game server.
+  def update(%{id: _id, room_id: room_id, player_id: player_id}, socket) do
+    first_delivery? = is_nil(socket.assigns.room_id)
+    socket = assign(socket, room_id: room_id, player_id: player_id)
+
+    if first_delivery? do
+      {:ok, apply_sync(socket, Uno.Game.Server.snapshot(room_id))}
+    else
+      {:ok, socket}
+    end
+  end
+
+  # --- Private helpers
+
+  defp apply_sync(%{assigns: %{player_id: player_id}} = socket, %Uno.Events.Sync{} = event) do
     hand = Map.fetch!(event.hands, player_id)
 
     players_before = Enum.take_while(event.players, fn {id, _} -> id != player_id end)
@@ -200,34 +224,27 @@ defmodule UnoWeb.RoomLive.GameComponent do
     players_after =
       Enum.drop_while(event.players, fn {id, _} -> id != player_id end) |> Enum.drop(1)
 
-    {:ok,
-     socket
-     |> assign(
-       sequence: event.sequence,
-       hand: hand,
-       opponents:
-         Enum.map(players_after ++ players_before, fn {id, name} ->
-           %{
-             id: id,
-             name: name,
-             cards: Map.get(event.hands, id, %{}) |> hand_size()
-           }
-         end),
-       top_card: event.top_card,
-       turn_player_id: event.current_player_id,
-       direction: event.direction,
-       vulnerable_player_id: event.vulnerable_player_id,
-       chain: event.chain,
-       current_card_animation: nil
-     )
-     |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())}
+    socket
+    |> assign(
+      sequence: event.sequence,
+      hand: hand,
+      opponents:
+        Enum.map(players_after ++ players_before, fn {id, name} ->
+          %{
+            id: id,
+            name: name,
+            cards: Map.get(event.hands, id, %{}) |> hand_size()
+          }
+        end),
+      top_card: event.top_card,
+      turn_player_id: event.current_player_id,
+      direction: event.direction,
+      vulnerable_player_id: event.vulnerable_player_id,
+      chain: event.chain,
+      current_card_animation: nil
+    )
+    |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())
   end
-
-  # Assign directly passed in properties
-  def update(%{id: _id, player_id: player_id}, socket),
-    do: {:ok, assign(socket, :player_id, player_id)}
-
-  # --- Private helpers
 
   defp has_playable_card?(hand, top_card) do
     {top_colour, top_type} = card_parts(top_card)
