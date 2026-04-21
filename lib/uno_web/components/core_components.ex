@@ -82,7 +82,11 @@ defmodule UnoWeb.CoreComponents do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".FlashAutoDismiss">
       export default {
         mounted() { this.schedule() },
-        updated() { this.schedule() },
+        updated() {
+          this.el.getAnimations().forEach(a => a.cancel());
+          this.el.animate([{opacity: 0}, {opacity: 1}], {duration: 300, easing: "ease-out"});
+          this.schedule();
+        },
         destroyed() { clearTimeout(this.timer) },
         schedule() {
           if (this.el.dataset.autoDismiss !== "true") return;
