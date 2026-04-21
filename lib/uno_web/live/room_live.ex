@@ -42,6 +42,9 @@ defmodule UnoWeb.RoomLive do
     Events.CardsDrawn => :game
   }
 
+  def handle_info({:put_flash, kind, msg}, socket),
+    do: {:noreply, put_flash(socket, kind, msg)}
+
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
     with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]) do
       send_update(component, id: id, event: msg)
