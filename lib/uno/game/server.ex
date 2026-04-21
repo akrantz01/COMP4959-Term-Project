@@ -189,12 +189,25 @@ defmodule Uno.Game.Server do
 
   @impl true
   def handle_call({:draw, player_id}, _from, state) do
-    case draw_loop(state.logic_state, player_id, []) do
+    result =
+      if Logic.next_playable_card(state.logic_state, player_id) != nil do
+        case Logic.draw_card(state.logic_state, player_id) do
+          {:ok, updated_logic, drawn_card, _status} -> {:ok, updated_logic, [drawn_card]}
+          {:error, reason} -> {:error, reason}
+        end
+      else
+        draw_loop(state.logic_state, player_id, [])
+      end
+
+    case result do
       {:ok, updated_logic, drawn_cards} ->
         new_hand = updated_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: updated_logic}
         new_state = broadcast_cards_drawn(new_state, player_id, drawn_cards, new_hand)
         {:reply, {:ok, drawn_cards}, new_state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -317,12 +330,11 @@ defmodule Uno.Game.Server do
 
   defp process_uno_call(state, player_id) do
     case Logic.uno(state.logic_state, player_id) do
-      {:ok, updated_logic, penalties_map} ->
+      {:ok, updated_logic, _penalties_map} ->
         new_state =
           state
           |> Map.put(:logic_state, updated_logic)
           |> sync_vulnerability(updated_logic)
-          |> merge_penalties(penalties_map)
           |> resolve_pending_penalties()
 
         {:reply, :ok, new_state}
@@ -370,64 +382,39 @@ defmodule Uno.Game.Server do
     %{state | vulnerable_players: vulnerable_players}
   end
 
-  defp merge_penalties(state, penalties) do
-    merged_penalties =
-      Map.merge(state.logic_state.penalties, penalties, fn _player_id, existing, incoming ->
-        existing + incoming
-      end)
-
-    %{state | logic_state: %{state.logic_state | penalties: merged_penalties}}
-  end
-
   defp resolve_pending_penalties(state) do
-    penalties =
-      state.logic_state.penalties
-      |> Enum.filter(fn {_player_id, count} -> count > 0 end)
-      |> Map.new()
-
-    state = %{state | logic_state: %{state.logic_state | penalties: penalties}}
-
-    penalties
-    |> Enum.reduce(state, fn {player_id, count}, acc ->
-      draw_penalty_cards(acc, player_id, count)
+    state.logic_state.penalties
+    |> Enum.filter(fn {_player_id, count} -> count > 0 end)
+    |> Enum.reduce(state, fn {player_id, _count}, acc ->
+      draw_penalty_cards(acc, player_id)
     end)
-    |> clear_resolved_penalties()
   end
 
-  defp clear_resolved_penalties(state) do
-    remaining_penalties =
-      state.logic_state.penalties
-      |> Enum.filter(fn {_player_id, count} -> count > 0 end)
-      |> Map.new()
+  defp draw_penalty_cards(state, player_id) do
+    case Logic.draw_card(state.logic_state, player_id) do
+      {:ok, new_logic, drawn_card, status}
+      when status in [:penalty_continue, :penalty_complete] ->
+        new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: new_logic}
+        new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
 
-    %{state | logic_state: %{state.logic_state | penalties: remaining_penalties}}
-  end
-
-  defp draw_penalty_cards(state, player_id, count) when count > 0 do
-    {:ok, new_logic, drawn_card, _playable?} = Logic.draw_card(state.logic_state, player_id)
-    new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
-    new_logic = decrement_penalty(new_logic, player_id)
-    new_state = %{state | logic_state: new_logic}
-    new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
-    draw_penalty_cards(new_state, player_id, count - 1)
-  end
-
-  defp draw_penalty_cards(state, _player_id, 0), do: state
-
-  defp decrement_penalty(logic, player_id) do
-    updated_count = logic.penalties |> Map.get(player_id, 0) |> Kernel.-(1) |> max(0)
-    %{logic | penalties: Map.put(logic.penalties, player_id, updated_count)}
+        if status == :penalty_continue do
+          draw_penalty_cards(new_state, player_id)
+        else
+          new_state
+        end
+    end
   end
 
   # GS-15: Draws one card at a time until the drawn card is playable, then plays it.
   @spec draw_until_playable(map(), Logic.player_id()) :: map()
   defp draw_until_playable(state, player_id) do
-    {:ok, new_logic, drawn_card, playable?} = Logic.draw_card(state.logic_state, player_id)
+    {:ok, new_logic, drawn_card, status} = Logic.draw_card(state.logic_state, player_id)
     new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
     new_state = %{state | logic_state: new_logic}
     new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
 
-    if playable? do
+    if status == :playable do
       card = Logic.next_playable_card(new_logic, player_id) |> to_played_card()
       auto_play_card(new_state, player_id, [card])
     else
@@ -591,11 +578,14 @@ defmodule Uno.Game.Server do
 
   defp draw_loop(logic_state, player_id, cards_drawn) do
     case Logic.draw_card(logic_state, player_id) do
-      {:ok, updated_logic, drawn_card, true} ->
+      {:ok, updated_logic, drawn_card, :playable} ->
         {:ok, updated_logic, cards_drawn ++ [drawn_card]}
 
-      {:ok, updated_logic, drawn_card, _playable} ->
+      {:ok, updated_logic, drawn_card, :unplayable} ->
         draw_loop(updated_logic, player_id, cards_drawn ++ [drawn_card])
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end
