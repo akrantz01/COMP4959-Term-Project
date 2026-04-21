@@ -71,12 +71,14 @@ defmodule UnoWeb.RoomLive.GameComponent do
           }
         } = socket
       ) do
-    selected_cards = Enum.map(selected_cards, fn {card, _} -> card end)
+    cards = Enum.map(selected_cards, fn {card, _} -> card end)
 
-    case Game.play(room_id, player_id, selected_cards) do
-      :ok -> {:noreply, assign(socket, :selected_cards, [])}
-      # TODO: display error message
-      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
+    case Game.play(room_id, player_id, cards) do
+      :ok ->
+        {:noreply, assign(socket, :selected_cards, [])}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to play cards: #{inspect(reason)}")}
     end
   end
 
@@ -113,22 +115,23 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "accept-chain",
         _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id, chain: nil}} = socket
-      ),
-      do: {:noreply, put_flash(socket, :error, "No chain is active")}
-
-  def handle_event(
-        "accept-chain",
-        _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id, room_id: room_id}} = socket
-      ) do
+        %{
+          assigns: %{
+            player_id: player_id,
+            turn_player_id: player_id,
+            chain: chain,
+            room_id: room_id
+          }
+        } = socket
+      )
+      when not is_nil(chain) do
     case Game.accept_chain(room_id, player_id) do
-      :ok -> {:noreply, socket}
-      # TODO: display error message
-      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
-    end
+      :ok ->
+        {:noreply, socket}
 
-    {:noreply, socket}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to accept chain: #{inspect(reason)}")}
+    end
   end
 
   def handle_event("accept-chain", _unsigned_params, socket),
@@ -137,15 +140,21 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "uno",
         _unsigned_params,
-        %{assigns: %{player_id: player_id, uno_called: false, room_id: room_id}} = socket
+        %{
+          assigns: %{
+            uno_called: false,
+            player_id: player_id,
+            room_id: room_id
+          }
+        } = socket
       ) do
     case Game.uno(room_id, player_id) do
-      :ok -> {:noreply, socket}
-      # TODO: display error message
-      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
-    end
+      :ok ->
+        {:noreply, assign(socket, :uno_called, true)}
 
-    {:noreply, assign(socket, :uno_called, true)}
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to call UNO: #{inspect(reason)}")}
+    end
   end
 
   def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: true}} = socket),

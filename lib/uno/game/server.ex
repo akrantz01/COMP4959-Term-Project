@@ -202,9 +202,12 @@ defmodule Uno.Game.Server do
   def handle_call({:accept_chain, player_id}, _from, state) do
     case Logic.accept_chain(state.logic_state, player_id) do
       {:ok, updated_logic} ->
-        new_state =
-          %{state | logic_state: updated_logic, chain: updated_logic.chain}
-          |> resolve_pending_penalties()
+        # Increment sequence to ensure frontend accepts the NextTurn event
+        updated_logic = %{updated_logic | sequence: updated_logic.sequence + 1}
+        new_state = %{state | logic_state: updated_logic, chain: updated_logic.chain}
+        new_state = resolve_pending_penalties(new_state)
+        new_state = broadcast_next_turn(new_state, false)
+        new_state = start_inactivity_timer(new_state)
 
         {:reply, :ok, new_state}
 
