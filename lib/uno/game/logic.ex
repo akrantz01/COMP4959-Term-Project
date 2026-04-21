@@ -99,10 +99,9 @@ defmodule Uno.Game.Logic do
     {[card], rest} = Enum.split(deck, 1)
 
     case card do
-      # Not allowed to start with a wild card - flips until we get a non-wild card
       wild when wild in [:wild, :wild_draw_4] ->
-        # Put it at the bottom and try again
-        flip_starting_card(rest ++ [wild])
+        colour = Enum.random([:red, :green, :blue, :yellow])
+        {{wild, colour}, rest}
 
       {colour, type} ->
         {{colour, type}, rest}
