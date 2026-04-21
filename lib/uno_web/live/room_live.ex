@@ -1,24 +1,24 @@
 defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
 
-  alias Uno.{Events, PubSub}
+  alias Uno.{Events, PubSub, Room}
   alias UnoWeb.Forms.RoomForm
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
   def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
-    # TODO: remove once more is implemented in favour of room lookup
-    if connected?(socket) do
-      PubSub.subscribe({:room, room_id})
-      PubSub.subscribe({:game, room_id})
-    end
+    snapshot =
+      if connected?(socket) do
+        {:ok, snapshot} = Room.join(room_id, player_id)
+        PubSub.subscribe({:room, room_id})
+        snapshot
+      else
+        %{state: :loading, players: []}
+      end
 
     {:ok,
      socket
-     |> assign(
-       room_id: room_id,
-       player_id: player_id,
-       state: :lobby
-     )
+     |> assign(room_id: room_id, player_id: player_id)
+     |> assign(snapshot)
      |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
   end
 
