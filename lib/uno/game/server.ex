@@ -273,9 +273,6 @@ defmodule Uno.Game.Server do
     end
   end
 
-  @impl true
-  def handle_info(_msg, state), do: {:noreply, state}
-
   # -------------------- Private Helpers --------------------
 
   defp handle_uno_call_buffer(state, player_id, logic, sequence_number) do
