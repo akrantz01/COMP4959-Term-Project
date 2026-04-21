@@ -160,6 +160,7 @@ defmodule UnoWeb.DevtoolsLive do
   @event_sources %{
     Events.PlayerJoined => "Room",
     Events.PlayerLeft => "Room",
+    Events.AdminChanged => "Room",
     Events.GameStarted => "Room",
     Events.GameEnded => "Room",
     Events.Sync => "Sync",

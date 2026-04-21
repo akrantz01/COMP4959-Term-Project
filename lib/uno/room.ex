@@ -6,7 +6,7 @@ defmodule Uno.Room do
 
   The room state includes:
   - `room_id`: Unique identifier for the room.
-  - `state`: `:lobby` or `:in_game`.
+  - `state`: `:lobby` or `:game`.
   - `players`: Map of player IDs to player metadata.
   - `admin_id`: Player ID of the current room admin.
   - `last_winner_id`: Player ID of the last winning player.
@@ -16,9 +16,9 @@ defmodule Uno.Room do
   use GenServer, restart: :transient
 
   alias Uno.Events, as: Events
-  alias Uno.PubSub
+  alias Uno.{Presence, PubSub}
 
-  @type room_state :: :lobby | :in_game
+  @type room_state :: :lobby | :game
 
   @type player_meta :: %{
           name: String.t(),
@@ -102,21 +102,6 @@ defmodule Uno.Room do
   end
 
   @doc """
-  Mark a player as disconnected from the room.
-
-  If the player has no wins, their metadata is removed.
-  If the player has wins, their metadata is retained and marked disconnected.
-
-  Returns
-    `{:ok, %Events.PlayerLeft{}}` on success, or
-    `{:error, :player_not_found}` if the player ID is invalid.
-  """
-  @spec leave(Events.room_id(), Events.player_id()) :: call_result()
-  def leave(room_id, player_id) do
-    GenServer.call(via_tuple(room_id), {:leave, player_id})
-  end
-
-  @doc """
   Start the round.
 
   Returns
@@ -126,6 +111,18 @@ defmodule Uno.Room do
   @spec start(Events.room_id(), Events.player_id()) :: call_result()
   def start(room_id, player_id) do
     GenServer.call(via_tuple(room_id), {:start, player_id})
+  end
+
+  @doc """
+  Update the connection status of a player.
+
+  This should only be callsed from `Uno.Presence`.
+
+  Returns
+    `:ok` on success
+  """
+  def update_connection_status(room_id, player_id, status) do
+    GenServer.cast(via_tuple(room_id), {:connection, player_id, status})
   end
 
   @impl true
@@ -140,92 +137,20 @@ defmodule Uno.Room do
   # Implementation
 
   @impl true
-  def handle_call({:join, player_id}, _from, %{state: :in_game} = state) do
-    case Map.fetch(state.players, player_id) do
-      {:ok, player} ->
-        updated_players = Map.put(state.players, player_id, %{player | connected: true})
-        next_state = %{state | players: updated_players}
-        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
+  def handle_call({:join, player_id}, {pid, _tag}, state) do
+    case admit?(state, player_id) do
+      :ok ->
+        {:ok, _ref} = Presence.track(pid, state.room_id, player_id, %{})
+        {:reply, {:ok, join_snapshot(state)}, state}
 
-        # Code Added by Aarshdeep Vandal (R-10)
-        # Forward the connection event to the active Game GenServer
-        if state.game_pid != nil do
-          Uno.Game.Server.connect(state.game_pid, player_id)
-        end
-
-        # end of code added by aarshdeep vandal (R-10)
-
-        {:reply, {:ok, joined_event}, next_state}
-
-      :error ->
-        {:reply, {:error, :room_in_game}, state}
-    end
-  end
-
-  def handle_call({:join, player_id}, _from, state) do
-    state = cancel_shutdown_timer(state)
-
-    case Map.fetch(state.players, player_id) do
-      {:ok, player} ->
-        updated_players = Map.put(state.players, player_id, %{player | connected: true})
-        next_state = %{state | players: updated_players}
-        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
-
-        {:reply, {:ok, joined_event}, next_state}
-
-      :error ->
-        player_name = random_player_name()
-
-        updated_players =
-          Map.put(state.players, player_id, %{name: player_name, connected: true, wins: 0})
-
-        next_state = %{state | players: updated_players, admin_id: state.admin_id || player_id}
-        joined_event = %Events.PlayerJoined{player_id: player_id, name: player_name}
-
-        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
-
-        {:reply, {:ok, joined_event}, next_state}
-    end
-  end
-
-  @impl true
-  def handle_call({:leave, player_id}, _from, state) do
-    case Map.fetch(state.players, player_id) do
-      :error ->
-        {:reply, {:error, :player_not_found}, state}
-
-      {:ok, player} ->
-        {next_players, _removed?} = disconnect_or_remove_player(state.players, player_id, player)
-        next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
-        next_state = %{state | players: next_players, admin_id: next_admin_id}
-
-        next_state = maybe_start_shutdown_timer(next_state)
-
-        left_event = %Events.PlayerLeft{player_id: player_id}
-        :ok = PubSub.broadcast({:room, state.room_id}, left_event)
-
-        # Code Added by Aarshdeep Vandal (R-10)
-        # If the room is currently in a game, tell the Game process the player left
-        if state.state == :in_game and state.game_pid != nil do
-          Uno.Game.Server.disconnect(state.game_pid, player_id)
-        end
-
-        # end of code added by aarshdeep vandal (R-10)
-
-        # Added by Aarshdeep Vandal: Created a AdminChanged event in events.ex. Calling that event here
-        # so the frontend gets a broadcast that the room re-assigned the admin status to a new connected player
-        if state.admin_id != next_admin_id do
-          admin_change_event = %Events.AdminChanged{new_admin_id: next_admin_id}
-          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
-        end
-
-        {:reply, {:ok, left_event}, next_state}
+      {:error, _} = err ->
+        {:reply, err, state}
     end
   end
 
   # Aarshdeep Vandal: I modified this function by using the state variable
   @impl true
-  def handle_call({:name, _player_id, _desired_name}, _from, %{state: :in_game} = state) do
+  def handle_call({:name, _player_id, _desired_name}, _from, %{state: :game} = state) do
     # TODO: Implement name change when room in in game handler
 
     # Added by Aarshdeep Vandal
@@ -251,7 +176,7 @@ defmodule Uno.Room do
   end
 
   @impl true
-  def handle_call({:start, _player_id}, _from, %{state: :in_game} = state) do
+  def handle_call({:start, _player_id}, _from, %{state: :game} = state) do
     {:reply, {:error, :room_not_in_lobby}, state}
   end
 
@@ -268,17 +193,94 @@ defmodule Uno.Room do
     if connected_count < 2 do
       {:reply, {:error, :not_enough_players}, state}
     else
-      player_ids = Map.keys(state.players)
-      {:ok, game_pid} = Uno.Game.Server.start_link(state.room_id, player_ids)
+      {:ok, game_pid} =
+        Uno.Game.Server.start_link(
+          state.room_id,
+          Enum.map(state.players, fn {id, meta} -> {id, meta.name} end)
+        )
+
       game_ref = Process.monitor(game_pid)
 
-      next_state = %{state | state: :in_game, game_pid: game_pid, game_ref: game_ref}
+      next_state = %{state | state: :game, game_pid: game_pid, game_ref: game_ref}
 
       PubSub.broadcast({:room, state.room_id}, %Events.GameStarted{game_id: state.room_id})
 
       {:reply, :ok, next_state}
     end
   end
+
+  @impl true
+  def handle_cast({:connection, player_id, :online}, state) do
+    state = cancel_shutdown_timer(state)
+
+    case Map.fetch(state.players, player_id) do
+      {:ok, player} ->
+        updated_players = Map.put(state.players, player_id, %{player | connected: true})
+        next_state = %{state | players: updated_players}
+
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
+        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
+
+        # Code Added by Aarshdeep Vandal (R-10)
+        # Forward the connection event to the active Game GenServer
+        if state.game_pid != nil do
+          Uno.Game.Server.connect(state.game_pid, player_id)
+        end
+
+        # end of code added by aarshdeep vandal (R-10)
+
+        {:noreply, next_state}
+
+      :error ->
+        player_name = random_player_name()
+
+        updated_players =
+          Map.put(state.players, player_id, %{name: player_name, connected: true, wins: 0})
+
+        next_state = %{state | players: updated_players, admin_id: state.admin_id || player_id}
+
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player_name}
+        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
+
+        {:noreply, next_state}
+    end
+  end
+
+  def handle_cast({:connection, player_id, :offline}, state) do
+    case Map.fetch(state.players, player_id) do
+      :error ->
+        {:noreply, state}
+
+      {:ok, player} ->
+        {next_players, _removed?} = disconnect_or_remove_player(state, player_id, player)
+        next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
+        next_state = %{state | players: next_players, admin_id: next_admin_id}
+
+        next_state = maybe_start_shutdown_timer(next_state)
+
+        left_event = %Events.PlayerLeft{player_id: player_id}
+        :ok = PubSub.broadcast({:room, state.room_id}, left_event)
+
+        # Code Added by Aarshdeep Vandal (R-10)
+        # If the room is currently in a game, tell the Game process the player left
+        if state.state == :game and state.game_pid != nil do
+          Uno.Game.Server.disconnect(state.game_pid, player_id)
+        end
+
+        # end of code added by aarshdeep vandal (R-10)
+
+        # Added by Aarshdeep Vandal: Created a AdminChanged event in events.ex. Calling that event here
+        # so the frontend gets a broadcast that the room re-assigned the admin status to a new connected player
+        if state.admin_id != next_admin_id do
+          admin_change_event = %Events.AdminChanged{new_admin_id: next_admin_id}
+          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
+        end
+
+        {:noreply, next_state}
+    end
+  end
+
+  def handle_cast({:connection, _player_id, _status}, state), do: {:noreply, state}
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{game_ref: ref} = state) do
@@ -296,11 +298,33 @@ defmodule Uno.Room do
     {:stop, :normal, state}
   end
 
+  @ignored_events [Events.Sync, Events.NextTurn, Events.CardsDrawn, Events.CardsPlayed]
+
+  @impl true
+  def handle_info(%mod{}, state) when mod in @ignored_events, do: {:noreply, state}
+
+  defp admit?(%{state: :lobby}, _player_id), do: :ok
+
+  defp admit?(%{state: :game, players: players}, player_id) do
+    if Map.has_key?(players, player_id), do: :ok, else: {:error, :room_not_in_lobby}
+  end
+
+  defp join_snapshot(state) do
+    %{
+      state: state.state,
+      players: Enum.map(state.players, fn {id, meta} -> Map.put(meta, :id, id) end)
+    }
+  end
+
   defp random_player_name do
     "Player-" <> Nanoid.generate(4)
   end
 
-  defp disconnect_or_remove_player(players, player_id, player) do
+  defp disconnect_or_remove_player(%{state: :game, players: players}, player_id, player) do
+    {Map.put(players, player_id, %{player | connected: false}), false}
+  end
+
+  defp disconnect_or_remove_player(%{players: players}, player_id, player) do
     if player.wins > 0 do
       {Map.put(players, player_id, %{player | connected: false}), false}
     else

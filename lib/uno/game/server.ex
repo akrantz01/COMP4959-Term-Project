@@ -7,7 +7,6 @@ defmodule Uno.Game.Server do
   Handles all client interactions and timing-related behaviours.
   """
 
-  alias Phoenix.PubSub
   alias Uno.Events
   alias Uno.Game.Logic
 
@@ -33,42 +32,49 @@ defmodule Uno.Game.Server do
   Interface for player connecting to the game.
   """
   def connect(server, player_id) do
-    GenServer.cast(server, {:connect, player_id})
+    GenServer.cast(via_tuple(server), {:connect, player_id})
   end
 
   @doc """
   Interface for disconnecting from the game.
   """
   def disconnect(server, player_id) do
-    GenServer.cast(server, {:disconnect, player_id})
+    GenServer.cast(via_tuple(server), {:disconnect, player_id})
   end
 
   @doc """
   Interface for playing cards.
   """
   def play(server, player_id, cards) do
-    GenServer.call(server, {:play, player_id, cards})
+    GenServer.call(via_tuple(server), {:play, player_id, cards})
   end
 
   @doc """
   Interface for drawing a card.
   """
   def draw(server, player_id) do
-    GenServer.call(server, {:draw, player_id})
+    GenServer.call(via_tuple(server), {:draw, player_id})
   end
 
   @doc """
   Interface for accepting a draw chain.
   """
   def accept_chain(server, player_id) do
-    GenServer.call(server, {:accept_chain, player_id})
+    GenServer.call(via_tuple(server), {:accept_chain, player_id})
   end
 
   @doc """
   Interface for calling UNO.
   """
   def uno(server, player_id) do
-    GenServer.call(server, {:uno, player_id})
+    GenServer.call(via_tuple(server), {:uno, player_id})
+  end
+
+  @doc """
+  Returns the full game state as an `Events.Sync` struct.
+  """
+  def snapshot(room_id) do
+    GenServer.call(via_tuple(room_id), :snapshot)
   end
 
   # -------------------- Event Handlers --------------------
@@ -106,11 +112,8 @@ defmodule Uno.Game.Server do
   # -------------------- Server Callbacks --------------------
 
   @impl true
-  def init({room_id, _player_ids}) do
-    PubSub.subscribe(Uno.PubSub, "game:#{room_id}")
-
-    # initial_logic_state = Logic.new(player_ids)
-    initial_logic_state = nil
+  def init({room_id, player_ids}) do
+    initial_logic_state = Logic.init(player_ids)
 
     server_state = %{
       room_id: room_id,
@@ -159,7 +162,7 @@ defmodule Uno.Game.Server do
     old_logic = state.logic_state
 
     case Logic.play_cards(old_logic, player_id, cards) do
-      {:ok, new_logic} ->
+      {:ok, new_logic, transitions} ->
         player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
         new_state = mark_vulnerability(new_state, player_id, player_hand)
@@ -172,9 +175,7 @@ defmodule Uno.Game.Server do
             {:stop, :normal, :ok, ended_state}
 
           {:continue, continuing_state} ->
-            skip_count = count_skips(cards)
-            continuing_state = apply_skips(old_logic, continuing_state, skip_count)
-            continuing_state = broadcast_next_turn(continuing_state, false)
+            continuing_state = broadcast_turn_transitions(continuing_state, transitions)
             continuing_state = start_inactivity_timer(continuing_state)
             {:reply, :ok, continuing_state}
         end
@@ -186,36 +187,48 @@ defmodule Uno.Game.Server do
 
   @impl true
   def handle_call({:draw, player_id}, _from, state) do
-    case draw_loop(state.logic_state, player_id, []) do
+    result =
+      if Logic.next_playable_card(state.logic_state, player_id) != nil do
+        case Logic.draw_card(state.logic_state, player_id) do
+          {:ok, updated_logic, drawn_card, _status} -> {:ok, updated_logic, [drawn_card]}
+          {:error, reason} -> {:error, reason}
+        end
+      else
+        draw_loop(state.logic_state, player_id, [])
+      end
+
+    case result do
       {:ok, updated_logic, drawn_cards} ->
-        Enum.each(drawn_cards, fn card ->
-          PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:card_drawn, player_id, card})
-        end)
+        new_hand = updated_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: updated_logic}
+        new_state = broadcast_cards_drawn(new_state, player_id, drawn_cards, new_hand)
+        {:reply, {:ok, drawn_cards}, new_state}
 
-        updated_state = %{state | logic_state: updated_logic}
-
-        {:reply, {:ok, drawn_cards}, updated_state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
   @impl true
   def handle_call({:accept_chain, player_id}, _from, state) do
     case Logic.accept_chain(state.logic_state, player_id) do
-      {:ok, updated_logic} ->
-        Enum.each(updated_logic.penalties, fn {affected_player_id, penalty_count} ->
-          PubSub.broadcast(
-            Uno.PubSub,
-            "game:#{state.room_id}",
-            {:penalty_assigned, affected_player_id, penalty_count}
-          )
-        end)
+      {:ok, updated_logic, transitions} ->
+        new_state =
+          %{state | logic_state: updated_logic, chain: updated_logic.chain}
+          |> resolve_pending_penalties()
+          |> broadcast_turn_transitions(transitions)
+          |> start_inactivity_timer()
 
-        updated_state = %{state | logic_state: updated_logic}
-        {:reply, :ok, updated_state}
+        {:reply, :ok, new_state}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
     end
+  end
+
+  @impl true
+  def handle_call(:snapshot, _from, state) do
+    {:reply, build_sync(state), state}
   end
 
   @impl true
@@ -270,9 +283,6 @@ defmodule Uno.Game.Server do
     end
   end
 
-  @impl true
-  def handle_info(_msg, state), do: {:noreply, state}
-
   # -------------------- Private Helpers --------------------
 
   defp handle_uno_call_buffer(state, player_id, logic, sequence_number) do
@@ -317,12 +327,11 @@ defmodule Uno.Game.Server do
 
   defp process_uno_call(state, player_id) do
     case Logic.uno(state.logic_state, player_id) do
-      {:ok, updated_logic, penalties_map} ->
+      {:ok, updated_logic, _penalties_map} ->
         new_state =
           state
           |> Map.put(:logic_state, updated_logic)
           |> sync_vulnerability(updated_logic)
-          |> merge_penalties(penalties_map)
           |> resolve_pending_penalties()
 
         {:reply, :ok, new_state}
@@ -337,7 +346,7 @@ defmodule Uno.Game.Server do
     player_id = Logic.current_turn(logic)
 
     if MapSet.member?(state.auto_play_set, player_id) do
-      Process.send_after(self(), {:auto_play, player_id, logic.sequence}, 0)
+      Process.send_after(self(), {:auto_play, player_id, logic.sequence}, @uno_grace_period)
     else
       Process.send_after(
         self(),
@@ -370,64 +379,39 @@ defmodule Uno.Game.Server do
     %{state | vulnerable_players: vulnerable_players}
   end
 
-  defp merge_penalties(state, penalties) do
-    merged_penalties =
-      Map.merge(state.logic_state.penalties, penalties, fn _player_id, existing, incoming ->
-        existing + incoming
-      end)
-
-    %{state | logic_state: %{state.logic_state | penalties: merged_penalties}}
-  end
-
   defp resolve_pending_penalties(state) do
-    penalties =
-      state.logic_state.penalties
-      |> Enum.filter(fn {_player_id, count} -> count > 0 end)
-      |> Map.new()
-
-    state = %{state | logic_state: %{state.logic_state | penalties: penalties}}
-
-    penalties
-    |> Enum.reduce(state, fn {player_id, count}, acc ->
-      draw_penalty_cards(acc, player_id, count)
+    state.logic_state.penalties
+    |> Enum.filter(fn {_player_id, count} -> count > 0 end)
+    |> Enum.reduce(state, fn {player_id, _count}, acc ->
+      draw_penalty_cards(acc, player_id)
     end)
-    |> clear_resolved_penalties()
   end
 
-  defp clear_resolved_penalties(state) do
-    remaining_penalties =
-      state.logic_state.penalties
-      |> Enum.filter(fn {_player_id, count} -> count > 0 end)
-      |> Map.new()
+  defp draw_penalty_cards(state, player_id) do
+    case Logic.draw_card(state.logic_state, player_id) do
+      {:ok, new_logic, drawn_card, status}
+      when status in [:penalty_continue, :penalty_complete] ->
+        new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: new_logic}
+        new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
 
-    %{state | logic_state: %{state.logic_state | penalties: remaining_penalties}}
-  end
-
-  defp draw_penalty_cards(state, player_id, count) when count > 0 do
-    {:ok, new_logic, drawn_card, _playable?} = Logic.draw_card(state.logic_state, player_id)
-    new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
-    new_logic = decrement_penalty(new_logic, player_id)
-    new_state = %{state | logic_state: new_logic}
-    new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
-    draw_penalty_cards(new_state, player_id, count - 1)
-  end
-
-  defp draw_penalty_cards(state, _player_id, 0), do: state
-
-  defp decrement_penalty(logic, player_id) do
-    updated_count = logic.penalties |> Map.get(player_id, 0) |> Kernel.-(1) |> max(0)
-    %{logic | penalties: Map.put(logic.penalties, player_id, updated_count)}
+        if status == :penalty_continue do
+          draw_penalty_cards(new_state, player_id)
+        else
+          new_state
+        end
+    end
   end
 
   # GS-15: Draws one card at a time until the drawn card is playable, then plays it.
   @spec draw_until_playable(map(), Logic.player_id()) :: map()
   defp draw_until_playable(state, player_id) do
-    {:ok, new_logic, drawn_card, playable?} = Logic.draw_card(state.logic_state, player_id)
+    {:ok, new_logic, drawn_card, status} = Logic.draw_card(state.logic_state, player_id)
     new_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
     new_state = %{state | logic_state: new_logic}
     new_state = broadcast_cards_drawn(new_state, player_id, [drawn_card], new_hand)
 
-    if playable? do
+    if status == :playable do
       card = Logic.next_playable_card(new_logic, player_id) |> to_played_card()
       auto_play_card(new_state, player_id, [card])
     else
@@ -441,7 +425,7 @@ defmodule Uno.Game.Server do
     old_logic = state.logic_state
 
     case Logic.play_cards(old_logic, player_id, cards) do
-      {:ok, new_logic} ->
+      {:ok, new_logic, transitions} ->
         player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
         new_state = mark_vulnerability(new_state, player_id, player_hand)
@@ -454,9 +438,7 @@ defmodule Uno.Game.Server do
             ended_state
 
           {:continue, continuing_state} ->
-            skip_count = count_skips(cards)
-            continuing_state = apply_skips(old_logic, continuing_state, skip_count)
-            continuing_state = broadcast_next_turn(continuing_state, false)
+            continuing_state = broadcast_turn_transitions(continuing_state, transitions)
             start_inactivity_timer(continuing_state)
         end
 
@@ -510,6 +492,7 @@ defmodule Uno.Game.Server do
       direction: logic.direction,
       hands: hands_map,
       players: players_map,
+      vulnerable_player_id: logic.vulnerable_player_id,
       chain: state.chain
     }
   end
@@ -539,60 +522,35 @@ defmodule Uno.Game.Server do
     })
   end
 
-  # Counts how many skip cards are in the played list.
-  @spec count_skips([Logic.played_card()]) :: non_neg_integer()
-  defp count_skips(cards) do
-    Enum.count(cards, fn
-      {_colour, :skip} -> true
-      _ -> false
-    end)
-  end
+  # Enqueues one NextTurn event per transition returned by Logic, forwarding the
+  # pre-stamped sequence values verbatim so each event has a unique sequence.
+  @spec broadcast_turn_transitions(map(), [Logic.turn_transition()]) :: map()
+  defp broadcast_turn_transitions(state, transitions) do
+    logic = state.logic_state
 
-  # Enqueues NextTurn(skipped: true) for each skipped player.
-  # play_cards already advanced the turn past all of them, so we derive their IDs
-  # by peeking at the old state's player queue (positions 1..skip_count after current).
-  @spec apply_skips(Logic.t(), map(), non_neg_integer()) :: map()
-  defp apply_skips(_old_logic, state, 0), do: state
-
-  defp apply_skips(old_logic, state, skip_count) do
-    old_logic.players
-    |> :queue.to_list()
-    |> Enum.drop(1)
-    |> Enum.take(skip_count)
-    |> Enum.reduce(state, fn {skipped_id, _name}, acc ->
+    Enum.reduce(transitions, state, fn transition, acc ->
       enqueue_broadcast(acc, %Events.NextTurn{
-        sequence: acc.logic_state.sequence,
-        player_id: skipped_id,
-        top_card: acc.logic_state.top_card,
-        direction: acc.logic_state.direction,
-        skipped: true,
+        sequence: transition.sequence,
+        player_id: transition.player_id,
+        top_card: logic.top_card,
+        direction: logic.direction,
+        vulnerable_player_id: logic.vulnerable_player_id,
+        skipped: transition.skipped,
         chain: acc.chain
       })
     end)
   end
 
-  # Enqueues the next_turn event for the current logic state's active player.
-  @spec broadcast_next_turn(map(), boolean()) :: map()
-  defp broadcast_next_turn(state, skipped) do
-    logic = state.logic_state
-
-    enqueue_broadcast(state, %Events.NextTurn{
-      sequence: logic.sequence,
-      player_id: Logic.current_turn(logic),
-      top_card: logic.top_card,
-      direction: logic.direction,
-      skipped: skipped,
-      chain: state.chain
-    })
-  end
-
   defp draw_loop(logic_state, player_id, cards_drawn) do
     case Logic.draw_card(logic_state, player_id) do
-      {:ok, updated_logic, drawn_card, true} ->
+      {:ok, updated_logic, drawn_card, :playable} ->
         {:ok, updated_logic, cards_drawn ++ [drawn_card]}
 
-      {:ok, updated_logic, drawn_card, _playable} ->
+      {:ok, updated_logic, drawn_card, :unplayable} ->
         draw_loop(updated_logic, player_id, cards_drawn ++ [drawn_card])
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

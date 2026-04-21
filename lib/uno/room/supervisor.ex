@@ -19,13 +19,24 @@ defmodule Uno.Room.Supervisor do
   # Public API
 
   @doc """
+  Check if a room with the given `room_id` exists
+  """
+  @spec lookup(String.t()) :: {:ok, pid()} | {:error, :not_found}
+  def lookup(room_id) do
+    case Registry.lookup(Uno.Room.Registry, room_id) do
+      [{pid, nil}] -> {:ok, pid}
+      [] -> {:error, :not_found}
+    end
+  end
+
+  @doc """
   Start a new room with the given `room_id` or a random one if not provided.
 
   Returns
     `{:ok, room_id, pid}` on success, or
     `{:error, :room_id_taken}` if the room ID is already in use
   """
-  def start_room(room_id \\ Nanoid.generate(5)) do
+  def start_room(room_id \\ Nanoid.generate()) do
     case Registry.lookup(Uno.Room.Registry, room_id) do
       [] ->
         case DynamicSupervisor.start_child(__MODULE__, {Room, room_id}) do

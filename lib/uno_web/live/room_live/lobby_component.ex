@@ -9,45 +9,31 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
      |> assign(:room_id, nil)
      |> assign(:player_id, nil)
      |> assign(:player_name, "")
-     |> assign(:players, [])
+     |> stream(:players, [], reset: true)
      |> assign(:connected_count, 0)
      |> assign(:is_admin, false)
      |> assign(:last_winner_player_id, nil)}
   end
 
   def update(%{event: %Events.PlayerJoined{} = event}, socket) do
-    players =
-      socket.assigns.players
-      |> upsert_player(%{
-        id: event.player_id,
-        name: event.name,
-        connected: true,
-        wins: 0,
-        losses: 0
-      })
-
     {:ok,
      socket
-     |> assign(:players, players)
-     |> assign(:connected_count, count_connected(players))
-     |> maybe_update_player_name()}
+     |> update(:connected_count, &(&1 + 1))
+     |> maybe_update_player_name(event)
+     |> stream_insert(:players, %{
+       id: event.player_id,
+       name: event.name,
+       connected: true,
+       wins: 0,
+       losses: 0
+     })}
   end
 
   def update(%{event: %Events.PlayerLeft{} = event}, socket) do
-    players =
-      Enum.map(socket.assigns.players, fn player ->
-        if player.id == event.player_id do
-          Map.put(player, :connected, false)
-        else
-          player
-        end
-      end)
-
     {:ok,
      socket
-     |> assign(:players, players)
-     |> assign(:connected_count, count_connected(players))
-     |> maybe_update_player_name()}
+     |> update(:connected_count, &(&1 - 1))
+     |> stream_delete(:players, %{id: event.player_id})}
   end
 
   def update(%{event: %Events.AdminChanged{new_admin_id: new_admin_id}}, socket) do
@@ -58,13 +44,21 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
     {:ok, assign(socket, :last_winner_player_id, winner_id)}
   end
 
-  def update(%{id: _id, room_id: room_id, player_id: player_id} = assigns, socket) do
+  def update(
+        %{id: _id, room_id: room_id, player_id: player_id, players: players} = assigns,
+        socket
+      ) do
     socket =
       socket
       |> assign(assigns)
       |> assign(:room_id, room_id)
       |> assign(:player_id, player_id)
-      |> maybe_update_player_name()
+      |> assign(:connected_count, length(players))
+      |> assign(
+        :player_name,
+        Enum.find_value(players, "", fn p -> if(p.id == player_id, do: p.name) end)
+      )
+      |> stream(:players, players, reset: true)
 
     {:ok, socket}
   end
@@ -73,29 +67,19 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
     {:ok, assign(socket, assigns)}
   end
 
-  defp upsert_player(players, incoming) do
-    case Enum.find_index(players, &(&1.id == incoming.id)) do
-      nil ->
-        players ++ [incoming]
-
-      index ->
-        List.replace_at(players, index, Map.merge(Enum.at(players, index), incoming))
-    end
+  def handle_event("update_name", %{"player_name" => player_name}, socket) do
+    _ = Uno.Room.name(socket.assigns.room_id, socket.assigns.player_id, player_name)
+    {:noreply, socket}
   end
 
-  defp count_connected(players) do
-    Enum.count(players, &Map.get(&1, :connected, false))
+  def handle_event("start_game", _params, socket) do
+    _ = Uno.Room.start(socket.assigns.room_id, socket.assigns.player_id)
+    {:noreply, socket}
   end
 
-  defp maybe_update_player_name(socket) do
-    player_name =
-      socket.assigns.players
-      |> Enum.find(fn p -> p.id == socket.assigns.player_id end)
-      |> case do
-        nil -> socket.assigns.player_name
-        player -> player.name
-      end
-
-    assign(socket, :player_name, player_name)
+  defp maybe_update_player_name(socket, %{player_id: player_id, name: name}) do
+    update(socket, :player_name, fn previous_name ->
+      if(player_id == socket.assigns.player_id, do: name, else: previous_name)
+    end)
   end
 end

@@ -43,6 +43,7 @@ defmodule UnoWeb.CoreComponents do
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
   attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :auto_dismiss, :boolean, default: true
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -54,6 +55,8 @@ defmodule UnoWeb.CoreComponents do
     <div
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
+      phx-hook=".FlashAutoDismiss"
+      data-auto-dismiss={to_string(@auto_dismiss)}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
       class="toast toast-top toast-end z-50"
@@ -76,6 +79,22 @@ defmodule UnoWeb.CoreComponents do
         </button>
       </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".FlashAutoDismiss">
+      export default {
+        mounted() { this.schedule() },
+        updated() {
+          this.el.getAnimations().forEach(a => a.cancel());
+          this.el.animate([{opacity: 0}, {opacity: 1}], {duration: 300, easing: "ease-out"});
+          this.schedule();
+        },
+        destroyed() { clearTimeout(this.timer) },
+        schedule() {
+          if (this.el.dataset.autoDismiss !== "true") return;
+          clearTimeout(this.timer);
+          this.timer = setTimeout(() => this.el.click(), 2000);
+        }
+      }
+    </script>
     """
   end
 

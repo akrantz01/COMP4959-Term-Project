@@ -2,6 +2,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
   use UnoWeb, :live_component
 
   alias Phoenix.LiveView.JS
+  alias Uno.Game.Server, as: Game
   alias UnoWeb.Forms.{Card, SelectedCard}
 
   attr :player_id, :string, required: true
@@ -11,6 +12,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
       {:ok,
        socket
        |> assign(
+         room_id: nil,
          sequence: 0,
          hand: %{},
          opponents: [],
@@ -34,10 +36,10 @@ defmodule UnoWeb.RoomLive.GameComponent do
       {:noreply, assign(socket, :selected_cards, new_cards)}
     else
       {:error, :different_type} ->
-        {:noreply, put_flash(socket, :error, "Selected cards must all be the same type")}
+        {:noreply, flash(socket, :error, "Selected cards must all be the same type")}
 
       {:error, :duplicate_colour} ->
-        {:noreply, put_flash(socket, :error, "Selected cards must each be a different colour")}
+        {:noreply, flash(socket, :error, "Selected cards must each be a different colour")}
 
       _ ->
         {:noreply, socket}
@@ -55,7 +57,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
           }
         } = socket
       ),
-      do: {:noreply, put_flash(socket, :error, "No cards selected!")}
+      do: {:noreply, flash(socket, :error, "No cards selected!")}
 
   def handle_event(
         "play",
@@ -64,67 +66,86 @@ defmodule UnoWeb.RoomLive.GameComponent do
           assigns: %{
             player_id: player_id,
             turn_player_id: player_id,
-            selected_cards: selected_cards
+            selected_cards: selected_cards,
+            room_id: room_id
           }
         } = socket
       ) do
-    _selected_cards = Enum.map(selected_cards, fn {card, _} -> card end)
-    # TODO: call game to play card(s)
-    {:noreply, assign(socket, :selected_cards, [])}
+    cards = Enum.map(selected_cards, fn {card, _} -> card end)
+
+    case Game.play(room_id, player_id, cards) do
+      :ok ->
+        {:noreply, assign(socket, :selected_cards, [])}
+
+      {:error, reason} ->
+        {:noreply, flash(socket, :error, reason_message(reason))}
+    end
   end
 
   def handle_event("play", _unsigned_params, socket),
-    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+    do: {:noreply, flash(socket, :error, "It's not your turn!")}
 
   def handle_event(
         "draw",
+        _unsigned_params,
+        %{assigns: %{player_id: player_id, turn_player_id: player_id, room_id: room_id}} = socket
+      ) do
+    case Game.draw(room_id, player_id) do
+      {:ok, _drawn} -> {:noreply, socket}
+      {:error, reason} -> {:noreply, flash(socket, :error, reason_message(reason))}
+    end
+  end
+
+  def handle_event("draw", _unsigned_params, socket),
+    do: {:noreply, flash(socket, :error, "It's not your turn!")}
+
+  def handle_event(
+        "accept-chain",
         _unsigned_params,
         %{
           assigns: %{
             player_id: player_id,
             turn_player_id: player_id,
-            hand: hand,
-            top_card: top_card
+            chain: chain,
+            room_id: room_id
           }
         } = socket
-      ) do
-    if hand_size(hand) > 20 && !has_playable_card?(hand, top_card) do
-      # TODO: call game to draw card(s)
-      {:noreply, socket}
-    else
-      {:noreply, put_flash(socket, :error, "You have too many cards!")}
+      )
+      when not is_nil(chain) do
+    case Game.accept_chain(room_id, player_id) do
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, flash(socket, :error, reason_message(reason))}
     end
   end
 
-  def handle_event("draw", _unsigned_params, socket),
-    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
-
-  def handle_event(
-        "accept-chain",
-        _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id, chain: nil}} = socket
-      ),
-      do: {:noreply, put_flash(socket, :error, "No chain is active")}
-
-  def handle_event(
-        "accept-chain",
-        _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id}} = socket
-      ) do
-    # TODO: call game to accept chain
-    {:noreply, socket}
-  end
-
   def handle_event("accept-chain", _unsigned_params, socket),
-    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+    do: {:noreply, flash(socket, :error, "It's not your turn!")}
 
-  def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: false}} = socket) do
-    # TODO: call game to call UNO!
-    {:noreply, assign(socket, :uno_called, true)}
+  def handle_event(
+        "uno",
+        _unsigned_params,
+        %{
+          assigns: %{
+            uno_called: false,
+            player_id: player_id,
+            room_id: room_id
+          }
+        } = socket
+      ) do
+    case Game.uno(room_id, player_id) do
+      :ok ->
+        {:noreply, assign(socket, :uno_called, true)}
+
+      {:error, reason} ->
+        {:noreply, flash(socket, :error, reason_message(reason))}
+    end
   end
 
   def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: true}} = socket),
-    do: {:noreply, put_flash(socket, :error, "Already called UNO! this turn!")}
+    do: {:noreply, flash(socket, :error, "Already called UNO! this turn!")}
 
   def handle_event(
         "dismiss_card_animation",
@@ -149,19 +170,22 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   def handle_event("dismiss_card_animation", _params, socket), do: {:noreply, socket}
 
-  def update(%{event: %Uno.Events.NextTurn{} = event}, socket) do
-    # TODO: validate sequence number
-    {:ok,
-     assign(socket,
-       sequence: event.sequence,
-       turn_player_id: event.player_id,
-       turn_skipped: event.skipped,
-       top_card: event.top_card,
-       direction: event.direction,
-       vulnerable_player_id: event.vulnerable_player_id,
-       chain: event.chain,
-       uno_called: false
-     )}
+  def update(%{event: %Uno.Events.NextTurn{} = event}, %{assigns: %{sequence: sequence}} = socket) do
+    if event.sequence <= sequence do
+      {:ok, socket}
+    else
+      {:ok,
+       assign(socket,
+         sequence: event.sequence,
+         turn_player_id: event.player_id,
+         turn_skipped: event.skipped,
+         top_card: event.top_card,
+         direction: event.direction,
+         vulnerable_player_id: event.vulnerable_player_id,
+         chain: event.chain,
+         uno_called: false
+       )}
+    end
   end
 
   def update(%{event: %Uno.Events.CardsPlayed{} = event}, socket) do
@@ -192,7 +216,27 @@ defmodule UnoWeb.RoomLive.GameComponent do
      |> enqueue_card_animation(%{kind: :drawn, actor_id: event.player_id, cards: cards})}
   end
 
-  def update(%{event: %Uno.Events.Sync{} = event}, %{assigns: %{player_id: player_id}} = socket) do
+  def update(%{event: %Uno.Events.Sync{} = event}, socket) do
+    {:ok, apply_sync(socket, event)}
+  end
+
+  # Assign directly passed in properties. On first delivery (room_id was nil),
+  # pull the authoritative game state — clients don't receive an initial Sync
+  # broadcast, so they populate themselves synchronously from the Game server.
+  def update(%{id: _id, room_id: room_id, player_id: player_id}, socket) do
+    first_delivery? = is_nil(socket.assigns.room_id)
+    socket = assign(socket, room_id: room_id, player_id: player_id)
+
+    if first_delivery? do
+      {:ok, apply_sync(socket, Game.snapshot(room_id))}
+    else
+      {:ok, socket}
+    end
+  end
+
+  # --- Private helpers
+
+  defp apply_sync(%{assigns: %{player_id: player_id}} = socket, %Uno.Events.Sync{} = event) do
     hand = Map.fetch!(event.hands, player_id)
 
     players_before = Enum.take_while(event.players, fn {id, _} -> id != player_id end)
@@ -200,34 +244,27 @@ defmodule UnoWeb.RoomLive.GameComponent do
     players_after =
       Enum.drop_while(event.players, fn {id, _} -> id != player_id end) |> Enum.drop(1)
 
-    {:ok,
-     socket
-     |> assign(
-       sequence: event.sequence,
-       hand: hand,
-       opponents:
-         Enum.map(players_after ++ players_before, fn {id, name} ->
-           %{
-             id: id,
-             name: name,
-             cards: Map.get(event.hands, id, %{}) |> hand_size()
-           }
-         end),
-       top_card: event.top_card,
-       turn_player_id: event.current_player_id,
-       direction: event.direction,
-       vulnerable_player_id: event.vulnerable_player_id,
-       chain: event.chain,
-       current_card_animation: nil
-     )
-     |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())}
+    socket
+    |> assign(
+      sequence: event.sequence,
+      hand: hand,
+      opponents:
+        Enum.map(players_after ++ players_before, fn {id, name} ->
+          %{
+            id: id,
+            name: name,
+            cards: Map.get(event.hands, id, %{}) |> hand_size()
+          }
+        end),
+      top_card: event.top_card,
+      turn_player_id: event.current_player_id,
+      direction: event.direction,
+      vulnerable_player_id: event.vulnerable_player_id,
+      chain: event.chain,
+      current_card_animation: nil
+    )
+    |> Phoenix.LiveView.put_private(:card_animation_queue, :queue.new())
   end
-
-  # Assign directly passed in properties
-  def update(%{id: _id, player_id: player_id}, socket),
-    do: {:ok, assign(socket, :player_id, player_id)}
-
-  # --- Private helpers
 
   defp has_playable_card?(hand, top_card) do
     {top_colour, top_type} = card_parts(top_card)
@@ -296,6 +333,22 @@ defmodule UnoWeb.RoomLive.GameComponent do
     |> Phoenix.LiveView.put_private(:card_animation_seq, next_seq)
     |> assign(:current_card_animation, Map.put(card_animation, :id, next_seq))
   end
+
+  defp flash(socket, kind, msg) do
+    send(self(), {:put_flash, kind, msg})
+    socket
+  end
+
+  @reasons %{
+    not_your_turn: "It's not your turn!",
+    card_not_in_hand: "One of your selected cards isn't in your hand",
+    card_not_playable: "One of your selected cards cannot be played",
+    invalid_multi_play: "Cannot play those cards together",
+    mixed_chain: "Selected card(s) does not match chain type",
+    no_active_chain: "No chain is active",
+    must_play_card: "You have too many cards and must play one"
+  }
+  defp reason_message(reason), do: Map.get(@reasons, reason, "Unknown error :(")
 
   # --- Private UI helpers ---
 

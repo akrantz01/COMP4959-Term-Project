@@ -24,9 +24,12 @@
             </span>
           </div>
 
-          <div class="space-y-3">
-            <%= for player <- @players do %>
-              <div class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+          <div id="players" class="space-y-3" phx-update="stream">
+            <%= for {dom_id, player} <- @streams.players do %>
+              <div
+                id={dom_id}
+                class="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3"
+              >
                 <div>
                   <div class="flex items-center gap-2">
                     <p class="font-semibold text-slate-900">{player.name}</p>
@@ -64,7 +67,7 @@
         <div class="rounded-[1.5rem] bg-white/90 p-5 shadow-lg">
           <h2 class="text-lg font-bold text-slate-900">Change Display Name</h2>
 
-          <.form for={%{}} phx-submit="update_name" class="mt-4 flex gap-3">
+          <.form for={%{}} phx-submit="update_name" phx-target={@myself} class="mt-4 flex gap-3">
             <input
               type="text"
               name="player_name"
@@ -87,6 +90,7 @@
           <%= if @is_admin do %>
             <button
               phx-click="start_game"
+              phx-target={@myself}
               disabled={@connected_count < 2}
               class="mt-4 w-full rounded-2xl bg-[linear-gradient(180deg,#ffe352_0%,#ffb400_100%)] px-6 py-3 text-lg font-black text-white shadow-lg transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
             >

@@ -1,26 +1,26 @@
 <main class="flex min-h-dvh flex-col">
-  <div class="flex-none">
-    <h1>Room: {@room_id}</h1>
-
-    <.form for={@room_form} phx-change="room-update" class="flex gap-x-4">
-      <.input field={@room_form[:player_id]} label="Player ID" />
-      <.input field={@room_form[:state]} label="State" type="select" options={[:lobby, :game]} />
-    </.form>
-  </div>
-
+  <Layouts.flash_group flash={@flash} />
   <div class="flex-1 min-h-0 flex flex-col">
-    <.live_component
-      :if={@state == :lobby}
-      module={LobbyComponent}
-      id="lobby"
-      room_id={@room_id}
-      player_id={@player_id}
-    />
-    <.live_component
-      :if={@state == :game}
-      module={GameComponent}
-      id="game"
-      player_id={@player_id}
-    />
+    <%= case @state do %>
+      <% :loading -> %>
+        <div class="flex-1 min-h-screen mx-auto max-w-md flex justify-center">
+          <span class="loading loading-dots loading-xl" />
+        </div>
+      <% :lobby -> %>
+        <.live_component
+          module={LobbyComponent}
+          id="lobby"
+          room_id={@room_id}
+          player_id={@player_id}
+          players={@players}
+        />
+      <% :game -> %>
+        <.live_component
+          module={GameComponent}
+          id="game"
+          room_id={@room_id}
+          player_id={@player_id}
+        />
+    <% end %>
   </div>
 </main>

@@ -1,57 +1,15 @@
 defmodule UnoWeb.RoomLive do
   use UnoWeb, :live_view
 
-  alias Uno.{Events, PubSub}
-  alias UnoWeb.Forms.RoomForm
+  alias Uno.{Events, PubSub, Room}
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
   def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
-    # TODO: remove once more is implemented in favour of room lookup
-    if connected?(socket) do
-      PubSub.subscribe({:room, room_id})
-      PubSub.subscribe({:game, room_id})
-    end
-
     {:ok,
      socket
-     |> assign(
-       room_id: room_id,
-       player_id: player_id,
-       state: :lobby
-     )
-     |> assign(:room_form, RoomForm.new(%{player_id: player_id, state: :lobby}))}
+     |> assign(room_id: room_id, player_id: player_id)
+     |> connect_to_room()}
   end
-
-  # --- Temporary, remove once more is implemented ---
-
-  def handle_event("room-update", %{"room" => params}, socket) do
-    changeset = RoomForm.changeset(params)
-
-    case RoomForm.parse(changeset) do
-      {:ok, data} ->
-        {:noreply,
-         assign(socket,
-           player_id: data.player_id,
-           state: data.state,
-           room_form: RoomForm.to_form(%{changeset | action: :validate})
-         )}
-
-      {:error, changeset} ->
-        {:noreply, assign(socket, room_form: RoomForm.to_form(changeset))}
-    end
-  end
-
-  def handle_event("update_name", %{"player_name" => player_name}, socket) do
-    _ = Uno.Room.name(socket.assigns.room_id, socket.assigns.player_id, player_name)
-    {:noreply, socket}
-  end
-
-  def handle_event("start_game", _params, socket) do
-    _ = Uno.Room.start(socket.assigns.room_id, socket.assigns.player_id)
-    {:noreply, socket}
-  end
-
-  # --- end temporary ---
 
   # --- Handle Pub/Sub events
 
@@ -74,12 +32,42 @@ defmodule UnoWeb.RoomLive do
     Events.CardsDrawn => :game
   }
 
+  def handle_info({:put_flash, kind, msg}, socket),
+    do: {:noreply, put_flash(socket, kind, msg)}
+
   def handle_info(%mod{} = msg, socket) when is_map_key(@forwarded_events, mod) do
     with {component, id} <- component_target(socket.assigns.state, @forwarded_events[mod]) do
       send_update(component, id: id, event: msg)
     end
 
     {:noreply, socket}
+  end
+
+  defp connect_to_room(%{assigns: %{room_id: room_id, player_id: player_id}} = socket) do
+    if connected?(socket) do
+      case join_room(room_id, player_id) do
+        {:ok, snapshot} ->
+          PubSub.subscribe({:room, room_id})
+          PubSub.subscribe({:game, room_id})
+          assign(socket, snapshot)
+
+        {:error, :not_found} ->
+          socket |> put_flash(:error, "Room not found!") |> redirect(to: "/")
+
+        {:error, :room_not_in_lobby} ->
+          socket |> put_flash(:error, "Game has already started!") |> redirect(to: "/")
+      end
+    else
+      assign(socket, state: :loading, players: [])
+    end
+  end
+
+  defp join_room(room_id, player_id) do
+    try do
+      Room.join(room_id, player_id)
+    catch
+      :exit, {:noproc, _} -> {:error, :not_found}
+    end
   end
 
   defp component_target(state, :both), do: component_target(state, state)
