@@ -217,10 +217,12 @@ defmodule Uno.Game.Server do
       {:ok, updated_logic} ->
         # Increment sequence to ensure frontend accepts the NextTurn event
         updated_logic = %{updated_logic | sequence: updated_logic.sequence + 1}
-        new_state = %{state | logic_state: updated_logic, chain: updated_logic.chain}
-        new_state = resolve_pending_penalties(new_state)
-        new_state = broadcast_next_turn(new_state, false)
-        new_state = start_inactivity_timer(new_state)
+
+        new_state =
+          %{state | logic_state: updated_logic, chain: updated_logic.chain}
+          |> resolve_pending_penalties()
+          |> broadcast_next_turn(false)
+          |> start_inactivity_timer()
 
         {:reply, :ok, new_state}
 
