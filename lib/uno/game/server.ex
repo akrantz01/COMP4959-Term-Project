@@ -46,29 +46,29 @@ defmodule Uno.Game.Server do
   @doc """
   Interface for playing cards.
   """
-  def play(server, player_id, cards) do
-    GenServer.call(server, {:play, player_id, cards})
+  def play(room_id, player_id, cards) do
+    GenServer.call(via_tuple(room_id), {:play, player_id, cards})
   end
 
   @doc """
   Interface for drawing a card.
   """
-  def draw(server, player_id) do
-    GenServer.call(server, {:draw, player_id})
+  def draw(room_id, player_id) do
+    GenServer.call(via_tuple(room_id), {:draw, player_id})
   end
 
   @doc """
   Interface for accepting a draw chain.
   """
-  def accept_chain(server, player_id) do
-    GenServer.call(server, {:accept_chain, player_id})
+  def accept_chain(room_id, player_id) do
+    GenServer.call(via_tuple(room_id), {:accept_chain, player_id})
   end
 
   @doc """
   Interface for calling UNO.
   """
-  def uno(server, player_id) do
-    GenServer.call(server, {:uno, player_id})
+  def uno(room_id, player_id) do
+    GenServer.call(via_tuple(room_id), {:uno, player_id})
   end
 
   @doc """
@@ -208,16 +208,14 @@ defmodule Uno.Game.Server do
   def handle_call({:accept_chain, player_id}, _from, state) do
     case Logic.accept_chain(state.logic_state, player_id) do
       {:ok, updated_logic} ->
-        Enum.each(updated_logic.penalties, fn {affected_player_id, penalty_count} ->
-          PubSub.broadcast(
-            Uno.PubSub,
-            "game:#{state.room_id}",
-            {:penalty_assigned, affected_player_id, penalty_count}
-          )
-        end)
+        # Increment sequence to ensure frontend accepts the NextTurn event
+        updated_logic = %{updated_logic | sequence: updated_logic.sequence + 1}
+        new_state = %{state | logic_state: updated_logic, chain: updated_logic.chain}
+        new_state = resolve_pending_penalties(new_state)
+        new_state = broadcast_next_turn(new_state, false)
+        new_state = start_inactivity_timer(new_state)
 
-        updated_state = %{state | logic_state: updated_logic}
-        {:reply, :ok, updated_state}
+        {:reply, :ok, new_state}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}

@@ -67,9 +67,13 @@
             <p><span class="font-semibold">Amount:</span> +{@chain.amount}</p>
 
             <div class="card-actions justify-center">
-              <.button class="btn btn-alert" phx-click="accept-chain" phx-target={@myself}>
-                Accept
-              </.button>
+              <%= if @player_id == @turn_player_id do %>
+                <.button class="btn btn-alert" phx-click="accept-chain" phx-target={@myself}>
+                  Accept
+                </.button>
+              <% else %>
+                <p class="text-sm text-gray-400">Waiting for player to accept...</p>
+              <% end %>
             </div>
           </div>
         </div>
