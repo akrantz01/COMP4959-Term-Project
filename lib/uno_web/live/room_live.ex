@@ -5,20 +5,10 @@ defmodule UnoWeb.RoomLive do
   alias UnoWeb.RoomLive.{GameComponent, LobbyComponent}
 
   def mount(%{"room_id" => room_id}, %{"player_id" => player_id}, socket) do
-    snapshot =
-      if connected?(socket) do
-        {:ok, snapshot} = Room.join(room_id, player_id)
-        PubSub.subscribe({:room, room_id})
-        PubSub.subscribe({:game, room_id})
-        snapshot
-      else
-        %{state: :loading, players: []}
-      end
-
     {:ok,
      socket
      |> assign(room_id: room_id, player_id: player_id)
-     |> assign(snapshot)}
+     |> connect_to_room()}
   end
 
   # --- Handle Pub/Sub events
@@ -48,6 +38,22 @@ defmodule UnoWeb.RoomLive do
     end
 
     {:noreply, socket}
+  end
+
+  defp connect_to_room(%{assigns: %{room_id: room_id, player_id: player_id}} = socket) do
+    if connected?(socket) do
+      case Room.join(room_id, player_id) do
+        {:ok, snapshot} ->
+          PubSub.subscribe({:room, room_id})
+          PubSub.subscribe({:game, room_id})
+          assign(socket, snapshot)
+
+        {:error, :room_not_in_lobby} ->
+          socket |> put_flash(:error, "Game has already started!") |> redirect(to: "/")
+      end
+    else
+      assign(socket, state: :loading, players: [])
+    end
   end
 
   defp component_target(state, :both), do: component_target(state, state)
