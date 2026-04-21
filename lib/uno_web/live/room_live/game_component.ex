@@ -66,13 +66,18 @@ defmodule UnoWeb.RoomLive.GameComponent do
           assigns: %{
             player_id: player_id,
             turn_player_id: player_id,
-            selected_cards: selected_cards
+            selected_cards: selected_cards,
+            room_id: room_id
           }
         } = socket
       ) do
-    _selected_cards = Enum.map(selected_cards, fn {card, _} -> card end)
-    # TODO: call game to play card(s)
-    {:noreply, assign(socket, :selected_cards, [])}
+    selected_cards = Enum.map(selected_cards, fn {card, _} -> card end)
+
+    case Game.play(room_id, player_id, selected_cards) do
+      :ok -> {:noreply, assign(socket, :selected_cards, [])}
+      # TODO: display error message
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
+    end
   end
 
   def handle_event("play", _unsigned_params, socket),
@@ -86,13 +91,17 @@ defmodule UnoWeb.RoomLive.GameComponent do
             player_id: player_id,
             turn_player_id: player_id,
             hand: hand,
-            top_card: top_card
+            top_card: top_card,
+            room_id: room_id
           }
         } = socket
       ) do
-    if hand_size(hand) > 20 && !has_playable_card?(hand, top_card) do
-      # TODO: call game to draw card(s)
-      {:noreply, socket}
+    if hand_size(hand) <= 20 || !has_playable_card?(hand, top_card) do
+      case Game.draw(room_id, player_id) do
+        {:ok, _drawn} -> {:noreply, socket}
+        # TODO: display error message
+        {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
+      end
     else
       {:noreply, put_flash(socket, :error, "You have too many cards!")}
     end
@@ -111,17 +120,31 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "accept-chain",
         _unsigned_params,
-        %{assigns: %{player_id: player_id, turn_player_id: player_id}} = socket
+        %{assigns: %{player_id: player_id, turn_player_id: player_id, room_id: room_id}} = socket
       ) do
-    # TODO: call game to accept chain
+    case Game.accept_chain(room_id, player_id) do
+      :ok -> {:noreply, socket}
+      # TODO: display error message
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
+    end
+
     {:noreply, socket}
   end
 
   def handle_event("accept-chain", _unsigned_params, socket),
     do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
 
-  def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: false}} = socket) do
-    # TODO: call game to call UNO!
+  def handle_event(
+        "uno",
+        _unsigned_params,
+        %{assigns: %{player_id: player_id, uno_called: false, room_id: room_id}} = socket
+      ) do
+    case Game.uno(room_id, player_id) do
+      :ok -> {:noreply, socket}
+      # TODO: display error message
+      {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
+    end
+
     {:noreply, assign(socket, :uno_called, true)}
   end
 
