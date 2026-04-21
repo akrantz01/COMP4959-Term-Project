@@ -33,42 +33,42 @@ defmodule Uno.Game.Server do
   Interface for player connecting to the game.
   """
   def connect(server, player_id) do
-    GenServer.cast(server, {:connect, player_id})
+    GenServer.cast(via_tuple(server), {:connect, player_id})
   end
 
   @doc """
   Interface for disconnecting from the game.
   """
   def disconnect(server, player_id) do
-    GenServer.cast(server, {:disconnect, player_id})
+    GenServer.cast(via_tuple(server), {:disconnect, player_id})
   end
 
   @doc """
   Interface for playing cards.
   """
   def play(server, player_id, cards) do
-    GenServer.call(server, {:play, player_id, cards})
+    GenServer.call(via_tuple(server), {:play, player_id, cards})
   end
 
   @doc """
   Interface for drawing a card.
   """
   def draw(server, player_id) do
-    GenServer.call(server, {:draw, player_id})
+    GenServer.call(via_tuple(server), {:draw, player_id})
   end
 
   @doc """
   Interface for accepting a draw chain.
   """
   def accept_chain(server, player_id) do
-    GenServer.call(server, {:accept_chain, player_id})
+    GenServer.call(via_tuple(server), {:accept_chain, player_id})
   end
 
   @doc """
   Interface for calling UNO.
   """
   def uno(server, player_id) do
-    GenServer.call(server, {:uno, player_id})
+    GenServer.call(via_tuple(server), {:uno, player_id})
   end
 
   @doc """
