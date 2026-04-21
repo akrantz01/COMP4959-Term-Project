@@ -21,7 +21,10 @@ defmodule UnoWeb.PageController do
       |> put_flash(:error, "Please enter a room code.")
       |> redirect(to: "/")
     else
-      redirect(conn, to: "/room/#{room_id}")
+      case Room.Supervisor.lookup(room_id) do
+        {:ok, _pid} -> redirect(conn, to: "/room/#{room_id}")
+        {:error, :not_found} -> conn |> put_flash(:error, "Room not found!") |> redirect(to: "/")
+      end
     end
   end
 end
