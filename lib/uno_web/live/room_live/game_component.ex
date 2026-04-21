@@ -78,7 +78,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, assign(socket, :selected_cards, [])}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to play cards: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -88,24 +88,11 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "draw",
         _unsigned_params,
-        %{
-          assigns: %{
-            player_id: player_id,
-            turn_player_id: player_id,
-            hand: hand,
-            top_card: top_card,
-            room_id: room_id
-          }
-        } = socket
+        %{assigns: %{player_id: player_id, turn_player_id: player_id, room_id: room_id}} = socket
       ) do
-    if hand_size(hand) <= 20 || !has_playable_card?(hand, top_card) do
-      case Game.draw(room_id, player_id) do
-        {:ok, _drawn} -> {:noreply, socket}
-        # TODO: display error message
-        {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
-      end
-    else
-      {:noreply, put_flash(socket, :error, "You have too many cards!")}
+    case Game.draw(room_id, player_id) do
+      {:ok, _drawn} -> {:noreply, socket}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -130,7 +117,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to accept chain: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -153,7 +140,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, assign(socket, :uno_called, true)}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to call UNO: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -346,6 +333,17 @@ defmodule UnoWeb.RoomLive.GameComponent do
     |> Phoenix.LiveView.put_private(:card_animation_seq, next_seq)
     |> assign(:current_card_animation, Map.put(card_animation, :id, next_seq))
   end
+
+  @reasons %{
+    not_your_turn: "It's not your turn!",
+    card_not_in_hand: "One of your selected cards isn't in your hand",
+    card_not_playable: "One of your selected cards cannot be played",
+    invalid_multi_play: "Cannot play those cards together",
+    mixed_chain: "Selected card(s) does not match chain type",
+    no_active_chain: "No chain is active",
+    must_play_card: "You have too many cards and must play one"
+  }
+  defp reason_message(reason), do: Map.get(@reasons, reason, "Unknown error :(")
 
   # --- Private UI helpers ---
 
