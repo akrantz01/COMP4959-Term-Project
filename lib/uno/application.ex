@@ -14,7 +14,7 @@ defmodule Uno.Application do
       {Phoenix.PubSub, name: Uno.PubSub},
 
       # Presence tracker for player connection status
-      UnoWeb.Presence,
+      Uno.Presence,
 
       # Room Supervisor and Registry
       {Registry, keys: :unique, name: Uno.Room.Registry},
