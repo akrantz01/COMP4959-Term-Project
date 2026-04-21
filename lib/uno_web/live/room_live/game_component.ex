@@ -88,21 +88,11 @@ defmodule UnoWeb.RoomLive.GameComponent do
   def handle_event(
         "draw",
         _unsigned_params,
-        %{
-          assigns: %{
-            player_id: player_id,
-            turn_player_id: player_id,
-            hand: hand,
-            top_card: top_card,
-            room_id: room_id
-          }
-        } = socket
+        %{assigns: %{player_id: player_id, turn_player_id: player_id, room_id: room_id}} = socket
       ) do
-    if hand_size(hand) <= 20 || !has_playable_card?(hand, top_card) do
-      {:ok, _drawn} = Game.draw(room_id, player_id)
-      {:noreply, socket}
-    else
-      {:noreply, put_flash(socket, :error, "You have too many cards!")}
+    case Game.draw(room_id, player_id) do
+      {:ok, _drawn} -> {:noreply, socket}
+      {:error, reason} -> {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -350,7 +340,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
     card_not_playable: "One of your selected cards cannot be played",
     invalid_multi_play: "Cannot play those cards together",
     mixed_chain: "Selected card(s) does not match chain type",
-    no_active_chain: "No chain is active"
+    no_active_chain: "No chain is active",
+    must_play_card: "You have too many cards and must play one"
   }
   defp reason_message(reason), do: Map.get(@reasons, reason, "Unknown error :(")
 
