@@ -170,17 +170,18 @@ defmodule Uno.Game.Logic do
     with :ok <- check_turn(game, player_id),
          :ok <- check_multi_play(played_cards),
          :ok <- check_all_in_hand(game, player_id, played_cards),
-         :ok <- check_first_playable(played_cards, game.top_card),
-         :ok <- check_chain_play(game.chain, played_cards),
-         {:ok, new_chain} <- apply_chain(game.chain, played_cards) do
-      {new_direction, _direction_changed?} = apply_reverse(game.direction, played_cards)
-      skip_count = apply_skip(played_cards)
+         reordered_cards <- ensure_playable_first(played_cards, game.top_card),
+         :ok <- check_first_playable(reordered_cards, game.top_card),
+         :ok <- check_chain_play(game.chain, reordered_cards),
+         {:ok, new_chain} <- apply_chain(game.chain, reordered_cards) do
+      {new_direction, _direction_changed?} = apply_reverse(game.direction, reordered_cards)
+      skip_count = apply_skip(reordered_cards)
 
       game =
         game
-        |> remove_all_from_hand(player_id, played_cards)
+        |> remove_all_from_hand(player_id, reordered_cards)
         |> mark_vulnerable_player(player_id)
-        |> Map.put(:top_card, List.last(played_cards))
+        |> Map.put(:top_card, List.last(reordered_cards))
         |> Map.put(:direction, new_direction)
         |> Map.put(:chain, new_chain)
         |> Map.put(:sequence, game.sequence + 1)
@@ -423,6 +424,20 @@ defmodule Uno.Game.Logic do
       all_same_normal_type?(played_cards) -> true
       all_same_wild_type?(played_cards) -> true
       true -> false
+    end
+  end
+
+  @spec ensure_playable_first([played_card()], played_card() | nil) :: [played_card()]
+  defp ensure_playable_first(played_cards, top_card) do
+    # Try to find a card that matches the top card and put it first
+    {playable, non_playable} =
+      Enum.split_with(played_cards, fn card ->
+        playable_card?(to_hand_card(card), top_card)
+      end)
+
+    case playable do
+      [first_playable | rest_playable] -> [first_playable | rest_playable ++ non_playable]
+      [] -> played_cards
     end
   end
 

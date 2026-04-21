@@ -124,7 +124,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
             room_id: room_id
           }
         } = socket
-      ) when not is_nil(chain) do
+      )
+      when not is_nil(chain) do
     case Game.accept_chain(room_id, player_id) do
       :ok ->
         {:noreply, socket}
