@@ -102,21 +102,6 @@ defmodule Uno.Room do
   end
 
   @doc """
-  Mark a player as disconnected from the room.
-
-  If the player has no wins, their metadata is removed.
-  If the player has wins, their metadata is retained and marked disconnected.
-
-  Returns
-    `{:ok, %Events.PlayerLeft{}}` on success, or
-    `{:error, :player_not_found}` if the player ID is invalid.
-  """
-  @spec leave(Events.room_id(), Events.player_id()) :: call_result()
-  def leave(room_id, player_id) do
-    GenServer.call(via_tuple(room_id), {:leave, player_id})
-  end
-
-  @doc """
   Start the round.
 
   Returns
@@ -160,41 +145,6 @@ defmodule Uno.Room do
 
       {:error, _} = err ->
         {:reply, err, state}
-    end
-  end
-
-  @impl true
-  def handle_call({:leave, player_id}, _from, state) do
-    case Map.fetch(state.players, player_id) do
-      :error ->
-        {:reply, {:error, :player_not_found}, state}
-
-      {:ok, player} ->
-        {next_players, _removed?} = disconnect_or_remove_player(state.players, player_id, player)
-        next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
-        next_state = %{state | players: next_players, admin_id: next_admin_id}
-
-        next_state = maybe_start_shutdown_timer(next_state)
-
-        left_event = %Events.PlayerLeft{player_id: player_id}
-        :ok = PubSub.broadcast({:room, state.room_id}, left_event)
-
-        # Code Added by Aarshdeep Vandal (R-10)
-        # If the room is currently in a game, tell the Game process the player left
-        if state.state == :in_game and state.game_pid != nil do
-          Uno.Game.Server.disconnect(state.game_pid, player_id)
-        end
-
-        # end of code added by aarshdeep vandal (R-10)
-
-        # Added by Aarshdeep Vandal: Created a AdminChanged event in events.ex. Calling that event here
-        # so the frontend gets a broadcast that the room re-assigned the admin status to a new connected player
-        if state.admin_id != next_admin_id do
-          admin_change_event = %Events.AdminChanged{new_admin_id: next_admin_id}
-          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
-        end
-
-        {:reply, {:ok, left_event}, next_state}
     end
   end
 
@@ -292,7 +242,39 @@ defmodule Uno.Room do
     end
   end
 
-  # TODO: handle disconnect
+  def handle_cast({:connection, player_id, :offline}, state) do
+    case Map.fetch(state.players, player_id) do
+      :error ->
+        {:noreply, state}
+
+      {:ok, player} ->
+        {next_players, _removed?} = disconnect_or_remove_player(state.players, player_id, player)
+        next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
+        next_state = %{state | players: next_players, admin_id: next_admin_id}
+
+        next_state = maybe_start_shutdown_timer(next_state)
+
+        left_event = %Events.PlayerLeft{player_id: player_id}
+        :ok = PubSub.broadcast({:room, state.room_id}, left_event)
+
+        # Code Added by Aarshdeep Vandal (R-10)
+        # If the room is currently in a game, tell the Game process the player left
+        if state.state == :in_game and state.game_pid != nil do
+          Uno.Game.Server.disconnect(state.game_pid, player_id)
+        end
+
+        # end of code added by aarshdeep vandal (R-10)
+
+        # Added by Aarshdeep Vandal: Created a AdminChanged event in events.ex. Calling that event here
+        # so the frontend gets a broadcast that the room re-assigned the admin status to a new connected player
+        if state.admin_id != next_admin_id do
+          admin_change_event = %Events.AdminChanged{new_admin_id: next_admin_id}
+          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
+        end
+
+        {:noreply, next_state}
+    end
+  end
 
   def handle_cast({:connection, _player_id, _status}, state), do: {:noreply, state}
 
