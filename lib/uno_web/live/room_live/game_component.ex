@@ -36,10 +36,10 @@ defmodule UnoWeb.RoomLive.GameComponent do
       {:noreply, assign(socket, :selected_cards, new_cards)}
     else
       {:error, :different_type} ->
-        {:noreply, put_flash(socket, :error, "Selected cards must all be the same type")}
+        {:noreply, flash(socket, :error, "Selected cards must all be the same type")}
 
       {:error, :duplicate_colour} ->
-        {:noreply, put_flash(socket, :error, "Selected cards must each be a different colour")}
+        {:noreply, flash(socket, :error, "Selected cards must each be a different colour")}
 
       _ ->
         {:noreply, socket}
@@ -57,7 +57,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
           }
         } = socket
       ),
-      do: {:noreply, put_flash(socket, :error, "No cards selected!")}
+      do: {:noreply, flash(socket, :error, "No cards selected!")}
 
   def handle_event(
         "play",
@@ -78,12 +78,12 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, assign(socket, :selected_cards, [])}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, reason_message(reason))}
+        {:noreply, flash(socket, :error, reason_message(reason))}
     end
   end
 
   def handle_event("play", _unsigned_params, socket),
-    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+    do: {:noreply, flash(socket, :error, "It's not your turn!")}
 
   def handle_event(
         "draw",
@@ -92,12 +92,12 @@ defmodule UnoWeb.RoomLive.GameComponent do
       ) do
     case Game.draw(room_id, player_id) do
       {:ok, _drawn} -> {:noreply, socket}
-      {:error, reason} -> {:noreply, put_flash(socket, :error, reason_message(reason))}
+      {:error, reason} -> {:noreply, flash(socket, :error, reason_message(reason))}
     end
   end
 
   def handle_event("draw", _unsigned_params, socket),
-    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+    do: {:noreply, flash(socket, :error, "It's not your turn!")}
 
   def handle_event(
         "accept-chain",
@@ -117,12 +117,12 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, reason_message(reason))}
+        {:noreply, flash(socket, :error, reason_message(reason))}
     end
   end
 
   def handle_event("accept-chain", _unsigned_params, socket),
-    do: {:noreply, put_flash(socket, :error, "It's not your turn!")}
+    do: {:noreply, flash(socket, :error, "It's not your turn!")}
 
   def handle_event(
         "uno",
@@ -140,12 +140,12 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, assign(socket, :uno_called, true)}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, reason_message(reason))}
+        {:noreply, flash(socket, :error, reason_message(reason))}
     end
   end
 
   def handle_event("uno", _unsigned_params, %{assigns: %{uno_called: true}} = socket),
-    do: {:noreply, put_flash(socket, :error, "Already called UNO! this turn!")}
+    do: {:noreply, flash(socket, :error, "Already called UNO! this turn!")}
 
   def handle_event(
         "dismiss_card_animation",
@@ -332,6 +332,11 @@ defmodule UnoWeb.RoomLive.GameComponent do
     socket
     |> Phoenix.LiveView.put_private(:card_animation_seq, next_seq)
     |> assign(:current_card_animation, Map.put(card_animation, :id, next_seq))
+  end
+
+  defp flash(socket, kind, msg) do
+    send(self(), {:put_flash, kind, msg})
+    socket
   end
 
   @reasons %{
