@@ -16,7 +16,7 @@ defmodule Uno.Room do
   use GenServer, restart: :transient
 
   alias Uno.Events, as: Events
-  alias Uno.PubSub
+  alias Uno.{Presence, PubSub}
 
   @type room_state :: :lobby | :in_game
 
@@ -128,6 +128,18 @@ defmodule Uno.Room do
     GenServer.call(via_tuple(room_id), {:start, player_id})
   end
 
+  @doc """
+  Update the connection status of a player.
+
+  This should only be callsed from `Uno.Presence`.
+
+  Returns
+    `:ok` on success
+  """
+  def update_connection_status(room_id, player_id, status) do
+    GenServer.cast(via_tuple(room_id), {:connection, player_id, status})
+  end
+
   @impl true
   @spec init(Events.room_id()) :: {:ok, state()}
   def init(room_id) do
@@ -140,51 +152,14 @@ defmodule Uno.Room do
   # Implementation
 
   @impl true
-  def handle_call({:join, player_id}, _from, %{state: :in_game} = state) do
-    case Map.fetch(state.players, player_id) do
-      {:ok, player} ->
-        updated_players = Map.put(state.players, player_id, %{player | connected: true})
-        next_state = %{state | players: updated_players}
-        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
+  def handle_call({:join, player_id}, {pid, _tag}, state) do
+    case admit?(state, player_id) do
+      :ok ->
+        {:ok, _ref} = Presence.track(pid, state.room_id, player_id, %{})
+        {:reply, {:ok, join_snapshot(state)}, state}
 
-        # Code Added by Aarshdeep Vandal (R-10)
-        # Forward the connection event to the active Game GenServer
-        if state.game_pid != nil do
-          Uno.Game.Server.connect(state.game_pid, player_id)
-        end
-
-        # end of code added by aarshdeep vandal (R-10)
-
-        {:reply, {:ok, joined_event}, next_state}
-
-      :error ->
-        {:reply, {:error, :room_in_game}, state}
-    end
-  end
-
-  def handle_call({:join, player_id}, _from, state) do
-    state = cancel_shutdown_timer(state)
-
-    case Map.fetch(state.players, player_id) do
-      {:ok, player} ->
-        updated_players = Map.put(state.players, player_id, %{player | connected: true})
-        next_state = %{state | players: updated_players}
-        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
-
-        {:reply, {:ok, joined_event}, next_state}
-
-      :error ->
-        player_name = random_player_name()
-
-        updated_players =
-          Map.put(state.players, player_id, %{name: player_name, connected: true, wins: 0})
-
-        next_state = %{state | players: updated_players, admin_id: state.admin_id || player_id}
-        joined_event = %Events.PlayerJoined{player_id: player_id, name: player_name}
-
-        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
-
-        {:reply, {:ok, joined_event}, next_state}
+      {:error, _} = err ->
+        {:reply, err, state}
     end
   end
 
@@ -281,6 +256,47 @@ defmodule Uno.Room do
   end
 
   @impl true
+  def handle_cast({:connection, player_id, :online}, state) do
+    state = cancel_shutdown_timer(state)
+
+    case Map.fetch(state.players, player_id) do
+      {:ok, player} ->
+        updated_players = Map.put(state.players, player_id, %{player | connected: true})
+        next_state = %{state | players: updated_players}
+
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player.name}
+        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
+
+        # Code Added by Aarshdeep Vandal (R-10)
+        # Forward the connection event to the active Game GenServer
+        if state.game_pid != nil do
+          Uno.Game.Server.connect(state.game_pid, player_id)
+        end
+
+        # end of code added by aarshdeep vandal (R-10)
+
+        {:noreply, next_state}
+
+      :error ->
+        player_name = random_player_name()
+
+        updated_players =
+          Map.put(state.players, player_id, %{name: player_name, connected: true, wins: 0})
+
+        next_state = %{state | players: updated_players, admin_id: state.admin_id || player_id}
+
+        joined_event = %Events.PlayerJoined{player_id: player_id, name: player_name}
+        :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
+
+        {:noreply, next_state}
+    end
+  end
+
+  # TODO: handle disconnect
+
+  def handle_cast({:connection, _player_id, _status}, state), do: {:noreply, state}
+
+  @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{game_ref: ref} = state) do
     next_state = %{state | state: :lobby, game_pid: nil, game_ref: nil}
 
@@ -294,6 +310,19 @@ defmodule Uno.Room do
   @impl true
   def handle_info(:shutdown_timeout, state) do
     {:stop, :normal, state}
+  end
+
+  defp admit?(%{state: :lobby}, _player_id), do: :ok
+
+  defp admit?(%{state: :in_game, players: players}, player_id) do
+    if player_id in players, do: :ok, else: {:error, :room_in_game}
+  end
+
+  defp join_snapshot(state) do
+    %{
+      state: state.state,
+      players: Enum.map(state.players, fn {id, meta} -> Map.put(meta, :id, id) end)
+    }
   end
 
   defp random_player_name do
