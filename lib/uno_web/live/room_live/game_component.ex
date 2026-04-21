@@ -2,6 +2,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
   use UnoWeb, :live_component
 
   alias Phoenix.LiveView.JS
+  alias Uno.Game.Server, as: Game
   alias UnoWeb.Forms.{Card, SelectedCard}
 
   attr :player_id, :string, required: true
@@ -150,8 +151,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
 
   def handle_event("dismiss_card_animation", _params, socket), do: {:noreply, socket}
 
-  def update(%{event: %Uno.Events.NextTurn{} = event}, socket) do
-    if event.sequence <= socket.assigns.sequence do
+  def update(%{event: %Uno.Events.NextTurn{} = event}, %{assigns: %{sequence: sequence}} = socket) do
+    if event.sequence <= sequence do
       {:ok, socket}
     else
       {:ok,
@@ -208,7 +209,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
     socket = assign(socket, room_id: room_id, player_id: player_id)
 
     if first_delivery? do
-      {:ok, apply_sync(socket, Uno.Game.Server.snapshot(room_id))}
+      {:ok, apply_sync(socket, Game.snapshot(room_id))}
     else
       {:ok, socket}
     end
