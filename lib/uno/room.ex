@@ -242,6 +242,14 @@ defmodule Uno.Room do
         joined_event = %Events.PlayerJoined{player_id: player_id, name: player_name}
         :ok = PubSub.broadcast({:room, state.room_id}, joined_event)
 
+        # Added by Aarshdeep Vandal
+        # Tell the frontend if this connection established a new admin!
+        if state.admin_id != next_state.admin_id do
+          admin_change_event = %Events.AdminChanged{new_admin_id: next_state.admin_id}
+          :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
+        end
+        # ----------------------
+
         {:noreply, next_state}
     end
   end
@@ -312,6 +320,8 @@ defmodule Uno.Room do
   defp join_snapshot(state) do
     %{
       state: state.state,
+      # Added by Aarshdeep Vandal:
+      admin_id: state.admin_id,
       players: Enum.map(state.players, fn {id, meta} -> Map.put(meta, :id, id) end)
     }
   end
