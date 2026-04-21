@@ -306,7 +306,7 @@ defmodule Uno.Room do
   defp admit?(%{state: :lobby}, _player_id), do: :ok
 
   defp admit?(%{state: :game, players: players}, player_id) do
-    if Map.has_key?(players, player_id), do: :ok, else: {:error, :room_in_game}
+    if Map.has_key?(players, player_id), do: :ok, else: {:error, :room_not_in_lobby}
   end
 
   defp join_snapshot(state) do
