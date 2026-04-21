@@ -554,7 +554,7 @@ defmodule Uno.Game.Logic do
     updated_penalties =
       case penalized_player_id do
         nil -> game.penalties
-        target_player_id -> Map.update(game.penalties, target_player_id, 1, &(&1 + 1))
+        target_player_id -> Map.update(game.penalties, target_player_id, 2, &(&1 + 2))
       end
 
     updated_game =
