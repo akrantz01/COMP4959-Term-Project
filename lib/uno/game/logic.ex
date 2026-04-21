@@ -306,17 +306,17 @@ defmodule Uno.Game.Logic do
   end
 
   # Advances the turn by one player, based on the current direction.
+  # :ltr rotates forward: pop front, push to back.
+  # :rtl rotates backward: pop back, push to front.
   @spec advance_turn(t()) :: t()
-  defp advance_turn(%__MODULE__{players: players, direction: direction} = game) do
+  defp advance_turn(%__MODULE__{players: players, direction: :ltr} = game) do
     {{:value, current}, rest} = :queue.out(players)
+    %{game | players: :queue.in(current, rest)}
+  end
 
-    new_players =
-      case direction do
-        :ltr -> :queue.in(current, rest)
-        :rtl -> :queue.in_r(current, rest)
-      end
-
-    %{game | players: new_players}
+  defp advance_turn(%__MODULE__{players: players, direction: :rtl} = game) do
+    {{:value, last}, rest} = :queue.out_r(players)
+    %{game | players: :queue.in_r(last, rest)}
   end
 
   # This is used to apply skip effects by moving past additional players.
