@@ -6,7 +6,7 @@ defmodule Uno.Room do
 
   The room state includes:
   - `room_id`: Unique identifier for the room.
-  - `state`: `:lobby` or `:in_game`.
+  - `state`: `:lobby` or `:game`.
   - `players`: Map of player IDs to player metadata.
   - `admin_id`: Player ID of the current room admin.
   - `last_winner_id`: Player ID of the last winning player.
@@ -18,7 +18,7 @@ defmodule Uno.Room do
   alias Uno.Events, as: Events
   alias Uno.{Presence, PubSub}
 
-  @type room_state :: :lobby | :in_game
+  @type room_state :: :lobby | :game
 
   @type player_meta :: %{
           name: String.t(),
@@ -150,7 +150,7 @@ defmodule Uno.Room do
 
   # Aarshdeep Vandal: I modified this function by using the state variable
   @impl true
-  def handle_call({:name, _player_id, _desired_name}, _from, %{state: :in_game} = state) do
+  def handle_call({:name, _player_id, _desired_name}, _from, %{state: :game} = state) do
     # TODO: Implement name change when room in in game handler
 
     # Added by Aarshdeep Vandal
@@ -176,7 +176,7 @@ defmodule Uno.Room do
   end
 
   @impl true
-  def handle_call({:start, _player_id}, _from, %{state: :in_game} = state) do
+  def handle_call({:start, _player_id}, _from, %{state: :game} = state) do
     {:reply, {:error, :room_not_in_lobby}, state}
   end
 
@@ -201,7 +201,7 @@ defmodule Uno.Room do
 
       game_ref = Process.monitor(game_pid)
 
-      next_state = %{state | state: :in_game, game_pid: game_pid, game_ref: game_ref}
+      next_state = %{state | state: :game, game_pid: game_pid, game_ref: game_ref}
 
       PubSub.broadcast({:room, state.room_id}, %Events.GameStarted{game_id: state.room_id})
 
@@ -263,7 +263,7 @@ defmodule Uno.Room do
 
         # Code Added by Aarshdeep Vandal (R-10)
         # If the room is currently in a game, tell the Game process the player left
-        if state.state == :in_game and state.game_pid != nil do
+        if state.state == :game and state.game_pid != nil do
           Uno.Game.Server.disconnect(state.game_pid, player_id)
         end
 
@@ -305,7 +305,7 @@ defmodule Uno.Room do
 
   defp admit?(%{state: :lobby}, _player_id), do: :ok
 
-  defp admit?(%{state: :in_game, players: players}, player_id) do
+  defp admit?(%{state: :game, players: players}, player_id) do
     if Map.has_key?(players, player_id), do: :ok, else: {:error, :room_in_game}
   end
 
@@ -320,7 +320,7 @@ defmodule Uno.Room do
     "Player-" <> Nanoid.generate(4)
   end
 
-  defp disconnect_or_remove_player(%{state: :in_game, players: players}, player_id, player) do
+  defp disconnect_or_remove_player(%{state: :game, players: players}, player_id, player) do
     {Map.put(players, player_id, %{player | connected: false}), false}
   end
 
