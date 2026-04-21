@@ -193,8 +193,12 @@ defmodule Uno.Room do
     if connected_count < 2 do
       {:reply, {:error, :not_enough_players}, state}
     else
-      player_ids = Map.keys(state.players)
-      {:ok, game_pid} = Uno.Game.Server.start_link(state.room_id, player_ids)
+      {:ok, game_pid} =
+        Uno.Game.Server.start_link(
+          state.room_id,
+          Enum.map(state.players, fn {id, meta} -> {id, meta.name} end)
+        )
+
       game_ref = Process.monitor(game_pid)
 
       next_state = %{state | state: :in_game, game_pid: game_pid, game_ref: game_ref}
