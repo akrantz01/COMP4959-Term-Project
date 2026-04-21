@@ -10,7 +10,11 @@ defmodule Uno.Game.Logic do
   @type chain_type :: :draw_2 | :wild_draw_4
   @type chain :: %{type: chain_type(), amount: pos_integer()}
   @type penalties :: %{player_id() => non_neg_integer()}
-  @type turn_transition :: %{player_id: player_id(), sequence: non_neg_integer(), skipped: boolean()}
+  @type turn_transition :: %{
+          player_id: player_id(),
+          sequence: non_neg_integer(),
+          skipped: boolean()
+        }
 
   @hand_size 7
   @type player_id :: String.t()
@@ -588,14 +592,13 @@ defmodule Uno.Game.Logic do
 
   # GL-16
   @spec uno(t(), player_id()) :: {:ok, t(), penalties()}
-  def uno(game, _player_id) do
-    current_player_id = current_turn(game)
+  def uno(game, player_id) do
     vulnerable_player_id = game.vulnerable_player_id
 
     penalized_player_id =
       cond do
-        is_nil(vulnerable_player_id) -> current_player_id
-        vulnerable_player_id == current_player_id -> nil
+        is_nil(vulnerable_player_id) -> player_id
+        vulnerable_player_id == player_id -> nil
         true -> vulnerable_player_id
       end
 

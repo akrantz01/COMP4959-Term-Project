@@ -346,7 +346,7 @@ defmodule Uno.Game.Server do
     player_id = Logic.current_turn(logic)
 
     if MapSet.member?(state.auto_play_set, player_id) do
-      Process.send_after(self(), {:auto_play, player_id, logic.sequence}, 0)
+      Process.send_after(self(), {:auto_play, player_id, logic.sequence}, @uno_grace_period)
     else
       Process.send_after(
         self(),
