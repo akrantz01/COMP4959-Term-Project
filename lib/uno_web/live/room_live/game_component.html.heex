@@ -3,21 +3,6 @@
 
   <div class="flex-1 grid grid-rows-[auto_1fr_auto]">
     <section class="flex-none">
-      <details>
-        <summary>State</summary>
-        <div>
-          <p>Player ID: {@player_id}</p>
-          <p>Sequence: {@sequence}</p>
-          <p>Hand: {inspect(@hand)}</p>
-          <p>Opponents: {inspect(@opponents)}</p>
-          <p>Top Card: {inspect(@top_card)}</p>
-          <p>Direction: {@direction}</p>
-          <p>Vulnerable Player ID: {@vulnerable_player_id}</p>
-          <p>Chain: {inspect(@chain)}</p>
-          <p>Selected Cards: {inspect(@selected_cards)}</p>
-        </div>
-      </details>
-
       <div class="flex flex-wrap flex-row gap-4 justify-center">
         <div
           :for={opponent <- @opponents}
