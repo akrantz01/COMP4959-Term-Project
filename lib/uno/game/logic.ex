@@ -166,6 +166,13 @@ defmodule Uno.Game.Logic do
              | :invalid_multi_play
              | :mixed_chain}
   def play_cards(game, player_id, played_cards) do
+    game =
+      if game.vulnerable_player_id != nil and game.vulnerable_player_id != player_id do
+        %{game | vulnerable_player_id: nil}
+      else
+        game
+      end
+
     with :ok <- check_turn(game, player_id),
          :ok <- check_multi_play(played_cards),
          :ok <- check_all_in_hand(game, player_id, played_cards),
@@ -185,7 +192,6 @@ defmodule Uno.Game.Logic do
         |> Map.put(:chain, new_chain)
         |> Map.put(:sequence, game.sequence + 1)
         |> advance_turn_steps(1 + skip_count)
-        |> Map.put(:vulnerable_player_id, nil)
 
       {:ok, game}
     end
