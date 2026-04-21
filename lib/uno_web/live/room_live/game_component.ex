@@ -78,7 +78,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, assign(socket, :selected_cards, [])}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to play cards: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -99,11 +99,8 @@ defmodule UnoWeb.RoomLive.GameComponent do
         } = socket
       ) do
     if hand_size(hand) <= 20 || !has_playable_card?(hand, top_card) do
-      case Game.draw(room_id, player_id) do
-        {:ok, _drawn} -> {:noreply, socket}
-        # TODO: display error message
-        {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
-      end
+      {:ok, _drawn} = Game.draw(room_id, player_id)
+      {:noreply, socket}
     else
       {:noreply, put_flash(socket, :error, "You have too many cards!")}
     end
@@ -130,7 +127,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to accept chain: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -153,7 +150,7 @@ defmodule UnoWeb.RoomLive.GameComponent do
         {:noreply, assign(socket, :uno_called, true)}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to call UNO: #{inspect(reason)}")}
+        {:noreply, put_flash(socket, :error, reason_message(reason))}
     end
   end
 
@@ -346,6 +343,16 @@ defmodule UnoWeb.RoomLive.GameComponent do
     |> Phoenix.LiveView.put_private(:card_animation_seq, next_seq)
     |> assign(:current_card_animation, Map.put(card_animation, :id, next_seq))
   end
+
+  @reasons %{
+    not_your_turn: "It's not your turn!",
+    card_not_in_hand: "One of your selected cards isn't in your hand",
+    card_not_playable: "One of your selected cards cannot be played",
+    invalid_multi_play: "Cannot play those cards together",
+    mixed_chain: "Selected card(s) does not match chain type",
+    no_active_chain: "No chain is active"
+  }
+  defp reason_message(reason), do: Map.get(@reasons, reason, "Unknown error :(")
 
   # --- Private UI helpers ---
 
