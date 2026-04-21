@@ -162,7 +162,7 @@ defmodule Uno.Game.Server do
     old_logic = state.logic_state
 
     case Logic.play_cards(old_logic, player_id, cards) do
-      {:ok, new_logic} ->
+      {:ok, new_logic, transitions} ->
         player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
         new_state = mark_vulnerability(new_state, player_id, player_hand)
@@ -175,9 +175,7 @@ defmodule Uno.Game.Server do
             {:stop, :normal, :ok, ended_state}
 
           {:continue, continuing_state} ->
-            skip_count = count_skips(cards)
-            continuing_state = apply_skips(old_logic, continuing_state, skip_count)
-            continuing_state = broadcast_next_turn(continuing_state, false)
+            continuing_state = broadcast_turn_transitions(continuing_state, transitions)
             continuing_state = start_inactivity_timer(continuing_state)
             {:reply, :ok, continuing_state}
         end
@@ -214,14 +212,11 @@ defmodule Uno.Game.Server do
   @impl true
   def handle_call({:accept_chain, player_id}, _from, state) do
     case Logic.accept_chain(state.logic_state, player_id) do
-      {:ok, updated_logic} ->
-        # Increment sequence to ensure frontend accepts the NextTurn event
-        updated_logic = %{updated_logic | sequence: updated_logic.sequence + 1}
-
+      {:ok, updated_logic, transitions} ->
         new_state =
           %{state | logic_state: updated_logic, chain: updated_logic.chain}
           |> resolve_pending_penalties()
-          |> broadcast_next_turn(false)
+          |> broadcast_turn_transitions(transitions)
           |> start_inactivity_timer()
 
         {:reply, :ok, new_state}
@@ -430,7 +425,7 @@ defmodule Uno.Game.Server do
     old_logic = state.logic_state
 
     case Logic.play_cards(old_logic, player_id, cards) do
-      {:ok, new_logic} ->
+      {:ok, new_logic, transitions} ->
         player_hand = new_logic |> Logic.player_hands() |> Map.get(player_id, [])
         new_state = %{state | logic_state: new_logic, chain: new_logic.chain}
         new_state = mark_vulnerability(new_state, player_id, player_hand)
@@ -443,9 +438,7 @@ defmodule Uno.Game.Server do
             ended_state
 
           {:continue, continuing_state} ->
-            skip_count = count_skips(cards)
-            continuing_state = apply_skips(old_logic, continuing_state, skip_count)
-            continuing_state = broadcast_next_turn(continuing_state, false)
+            continuing_state = broadcast_turn_transitions(continuing_state, transitions)
             start_inactivity_timer(continuing_state)
         end
 
@@ -529,53 +522,23 @@ defmodule Uno.Game.Server do
     })
   end
 
-  # Counts how many skip cards are in the played list.
-  @spec count_skips([Logic.played_card()]) :: non_neg_integer()
-  defp count_skips(cards) do
-    Enum.count(cards, fn
-      {_colour, :skip} -> true
-      _ -> false
-    end)
-  end
+  # Enqueues one NextTurn event per transition returned by Logic, forwarding the
+  # pre-stamped sequence values verbatim so each event has a unique sequence.
+  @spec broadcast_turn_transitions(map(), [Logic.turn_transition()]) :: map()
+  defp broadcast_turn_transitions(state, transitions) do
+    logic = state.logic_state
 
-  # Enqueues NextTurn(skipped: true) for each skipped player.
-  # play_cards already advanced the turn past all of them, so we derive their IDs
-  # by peeking at the old state's player queue (positions 1..skip_count after current).
-  @spec apply_skips(Logic.t(), map(), non_neg_integer()) :: map()
-  defp apply_skips(_old_logic, state, 0), do: state
-
-  defp apply_skips(old_logic, state, skip_count) do
-    old_logic.players
-    |> :queue.to_list()
-    |> Enum.drop(1)
-    |> Enum.take(skip_count)
-    |> Enum.reduce(state, fn {skipped_id, _name}, acc ->
+    Enum.reduce(transitions, state, fn transition, acc ->
       enqueue_broadcast(acc, %Events.NextTurn{
-        sequence: acc.logic_state.sequence,
-        player_id: skipped_id,
-        top_card: acc.logic_state.top_card,
-        direction: acc.logic_state.direction,
-        vulnerable_player_id: acc.logic_state.vulnerable_player_id,
-        skipped: true,
+        sequence: transition.sequence,
+        player_id: transition.player_id,
+        top_card: logic.top_card,
+        direction: logic.direction,
+        vulnerable_player_id: logic.vulnerable_player_id,
+        skipped: transition.skipped,
         chain: acc.chain
       })
     end)
-  end
-
-  # Enqueues the next_turn event for the current logic state's active player.
-  @spec broadcast_next_turn(map(), boolean()) :: map()
-  defp broadcast_next_turn(state, skipped) do
-    logic = state.logic_state
-
-    enqueue_broadcast(state, %Events.NextTurn{
-      sequence: logic.sequence,
-      player_id: Logic.current_turn(logic),
-      top_card: logic.top_card,
-      direction: logic.direction,
-      vulnerable_player_id: logic.vulnerable_player_id,
-      skipped: skipped,
-      chain: state.chain
-    })
   end
 
   defp draw_loop(logic_state, player_id, cards_drawn) do

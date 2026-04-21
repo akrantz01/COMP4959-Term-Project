@@ -10,6 +10,7 @@ defmodule Uno.Game.Logic do
   @type chain_type :: :draw_2 | :wild_draw_4
   @type chain :: %{type: chain_type(), amount: pos_integer()}
   @type penalties :: %{player_id() => non_neg_integer()}
+  @type turn_transition :: %{player_id: player_id(), sequence: non_neg_integer(), skipped: boolean()}
 
   @hand_size 7
   @type player_id :: String.t()
@@ -158,7 +159,7 @@ defmodule Uno.Game.Logic do
 
   # GL-7
   @spec play_cards(t(), player_id(), [played_card()]) ::
-          {:ok, t()}
+          {:ok, t(), [turn_transition()]}
           | {:error,
              :not_your_turn
              | :card_not_in_hand
@@ -183,17 +184,17 @@ defmodule Uno.Game.Logic do
       {new_direction, _direction_changed?} = apply_reverse(game.direction, reordered_cards)
       skip_count = apply_skip(reordered_cards)
 
-      game =
+      prepared_game =
         game
         |> remove_all_from_hand(player_id, reordered_cards)
         |> mark_vulnerable_player(player_id)
         |> Map.put(:top_card, List.last(reordered_cards))
         |> Map.put(:direction, new_direction)
         |> Map.put(:chain, new_chain)
-        |> Map.put(:sequence, game.sequence + 1)
-        |> advance_turn_steps(1 + skip_count)
 
-      {:ok, game}
+      {final_game, transitions} = advance_turn_steps(prepared_game, 1 + skip_count)
+
+      {:ok, final_game, transitions}
     end
   end
 
@@ -311,26 +312,46 @@ defmodule Uno.Game.Logic do
     end
   end
 
-  # Advances the turn by one player, based on the current direction.
+  # Advances the turn by one player, based on the current direction, and bumps sequence.
   # :ltr rotates forward: pop front, push to back.
   # :rtl rotates backward: pop back, push to front.
   @spec advance_turn(t()) :: t()
   defp advance_turn(%__MODULE__{players: players, direction: :ltr} = game) do
     {{:value, current}, rest} = :queue.out(players)
-    %{game | players: :queue.in(current, rest)}
+    %{game | players: :queue.in(current, rest), sequence: game.sequence + 1}
   end
 
   defp advance_turn(%__MODULE__{players: players, direction: :rtl} = game) do
     {{:value, last}, rest} = :queue.out_r(players)
-    %{game | players: :queue.in_r(last, rest)}
+    %{game | players: :queue.in_r(last, rest), sequence: game.sequence + 1}
   end
 
-  # This is used to apply skip effects by moving past additional players.
-  @spec advance_turn_steps(t(), non_neg_integer()) :: t()
-  defp advance_turn_steps(game, 0), do: game
+  # Advances the turn by `steps` players and returns the new state plus a list of
+  # turn transitions, one per step. All but the last are marked skipped: true.
+  @spec advance_turn_steps(t(), non_neg_integer()) :: {t(), [turn_transition()]}
+  defp advance_turn_steps(game, 0), do: {game, []}
 
   defp advance_turn_steps(game, steps) do
-    Enum.reduce(1..steps, game, fn _, acc -> advance_turn(acc) end)
+    {final_game, reversed_transitions} =
+      Enum.reduce(1..steps, {game, []}, fn _, {acc_game, acc_transitions} ->
+        new_game = advance_turn(acc_game)
+
+        transition = %{
+          player_id: current_turn(new_game),
+          sequence: new_game.sequence,
+          skipped: true
+        }
+
+        {new_game, [transition | acc_transitions]}
+      end)
+
+    transitions =
+      case Enum.reverse(reversed_transitions) do
+        [] -> []
+        list -> List.update_at(list, -1, &%{&1 | skipped: false})
+      end
+
+    {final_game, transitions}
   end
 
   # GL-8 (Helper function to flip direction)
@@ -538,7 +559,8 @@ defmodule Uno.Game.Logic do
   end
 
   # GL-14
-  @spec accept_chain(t(), player_id()) :: {:ok, t()} | {:error, :no_active_chain | :not_your_turn}
+  @spec accept_chain(t(), player_id()) ::
+          {:ok, t(), [turn_transition()]} | {:error, :no_active_chain | :not_your_turn}
   def accept_chain(%__MODULE__{chain: nil}, _player_id), do: {:error, :no_active_chain}
 
   def accept_chain(%__MODULE__{chain: %{amount: amount}} = game, player_id) do
@@ -548,7 +570,9 @@ defmodule Uno.Game.Logic do
           existing + amount
         end)
 
-      {:ok, %{game | penalties: penalties, chain: nil}}
+      new_game = %{game | penalties: penalties, chain: nil, sequence: game.sequence + 1}
+      transition = %{player_id: player_id, sequence: new_game.sequence, skipped: false}
+      {:ok, new_game, [transition]}
     end
   end
 
@@ -557,11 +581,7 @@ defmodule Uno.Game.Logic do
           {:ok, t(), player_id(), penalties()} | {:error, :not_your_turn}
   def skip(game, player_id) do
     with :ok <- check_turn(game, player_id) do
-      game =
-        game
-        |> Map.put(:sequence, game.sequence + 1)
-        |> advance_turn()
-
+      game = advance_turn(game)
       {:ok, game, current_turn(game), game.penalties}
     end
   end
