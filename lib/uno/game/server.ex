@@ -510,6 +510,7 @@ defmodule Uno.Game.Server do
       direction: logic.direction,
       hands: hands_map,
       players: players_map,
+      vulnerable_player_id: logic.vulnerable_player_id,
       chain: state.chain
     }
   end
@@ -565,6 +566,7 @@ defmodule Uno.Game.Server do
         player_id: skipped_id,
         top_card: acc.logic_state.top_card,
         direction: acc.logic_state.direction,
+        vulnerable_player_id: acc.logic_state.vulnerable_player_id,
         skipped: true,
         chain: acc.chain
       })
@@ -581,6 +583,7 @@ defmodule Uno.Game.Server do
       player_id: Logic.current_turn(logic),
       top_card: logic.top_card,
       direction: logic.direction,
+      vulnerable_player_id: logic.vulnerable_player_id,
       skipped: skipped,
       chain: state.chain
     })
