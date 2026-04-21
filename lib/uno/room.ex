@@ -248,6 +248,7 @@ defmodule Uno.Room do
           admin_change_event = %Events.AdminChanged{new_admin_id: next_state.admin_id}
           :ok = PubSub.broadcast({:room, state.room_id}, admin_change_event)
         end
+
         # ----------------------
 
         {:noreply, next_state}

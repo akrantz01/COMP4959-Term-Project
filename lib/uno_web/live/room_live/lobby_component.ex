@@ -46,7 +46,8 @@ defmodule UnoWeb.RoomLive.LobbyComponent do
 
   def update(
         # Added by Aarshdeep: Added admin_id here pattern matching
-        %{id: _id, room_id: room_id, player_id: player_id, players: players, admin_id: admin_id} = assigns,
+        %{id: _id, room_id: room_id, player_id: player_id, players: players, admin_id: admin_id} =
+          assigns,
         socket
       ) do
     socket =
