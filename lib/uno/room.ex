@@ -252,7 +252,7 @@ defmodule Uno.Room do
         {:noreply, state}
 
       {:ok, player} ->
-        {next_players, _removed?} = disconnect_or_remove_player(state.players, player_id, player)
+        {next_players, _removed?} = disconnect_or_remove_player(state, player_id, player)
         next_admin_id = maybe_reassign_admin(state.admin_id, player_id, next_players)
         next_state = %{state | players: next_players, admin_id: next_admin_id}
 
@@ -306,7 +306,7 @@ defmodule Uno.Room do
   defp admit?(%{state: :lobby}, _player_id), do: :ok
 
   defp admit?(%{state: :in_game, players: players}, player_id) do
-    if player_id in players, do: :ok, else: {:error, :room_in_game}
+    if Map.has_key?(players, player_id), do: :ok, else: {:error, :room_in_game}
   end
 
   defp join_snapshot(state) do
@@ -320,7 +320,11 @@ defmodule Uno.Room do
     "Player-" <> Nanoid.generate(4)
   end
 
-  defp disconnect_or_remove_player(players, player_id, player) do
+  defp disconnect_or_remove_player(%{state: :in_game, players: players}, player_id, player) do
+    {Map.put(players, player_id, %{player | connected: false}), false}
+  end
+
+  defp disconnect_or_remove_player(%{players: players}, player_id, player) do
     if player.wins > 0 do
       {Map.put(players, player_id, %{player | connected: false}), false}
     else
