@@ -93,17 +93,16 @@ defmodule UnoWeb.RoomLive.GameComponent do
             player_id: player_id,
             turn_player_id: player_id,
             hand: hand,
+            top_card: top_card,
             room_id: room_id
           }
         } = socket
       ) do
-    if hand_size(hand) <= 20 do
+    if hand_size(hand) <= 20 || !has_playable_card?(hand, top_card) do
       case Game.draw(room_id, player_id) do
-        :ok ->
-          {:noreply, socket}
-
-        {:error, reason} ->
-          {:noreply, put_flash(socket, :error, "Failed to draw card: #{inspect(reason)}")}
+        {:ok, _drawn} -> {:noreply, socket}
+        # TODO: display error message
+        {:error, _reason} -> {:noreply, put_flash(socket, :error, "Error!")}
       end
     else
       {:noreply, put_flash(socket, :error, "You have too many cards!")}

@@ -7,7 +7,6 @@ defmodule Uno.Game.Server do
   Handles all client interactions and timing-related behaviours.
   """
 
-  alias Phoenix.PubSub
   alias Uno.Events
   alias Uno.Game.Logic
 
@@ -33,42 +32,42 @@ defmodule Uno.Game.Server do
   Interface for player connecting to the game.
   """
   def connect(server, player_id) do
-    GenServer.cast(server, {:connect, player_id})
+    GenServer.cast(via_tuple(server), {:connect, player_id})
   end
 
   @doc """
   Interface for disconnecting from the game.
   """
   def disconnect(server, player_id) do
-    GenServer.cast(server, {:disconnect, player_id})
+    GenServer.cast(via_tuple(server), {:disconnect, player_id})
   end
 
   @doc """
   Interface for playing cards.
   """
-  def play(room_id, player_id, cards) do
-    GenServer.call(via_tuple(room_id), {:play, player_id, cards})
+  def play(server, player_id, cards) do
+    GenServer.call(via_tuple(server), {:play, player_id, cards})
   end
 
   @doc """
   Interface for drawing a card.
   """
-  def draw(room_id, player_id) do
-    GenServer.call(via_tuple(room_id), {:draw, player_id})
+  def draw(server, player_id) do
+    GenServer.call(via_tuple(server), {:draw, player_id})
   end
 
   @doc """
   Interface for accepting a draw chain.
   """
-  def accept_chain(room_id, player_id) do
-    GenServer.call(via_tuple(room_id), {:accept_chain, player_id})
+  def accept_chain(server, player_id) do
+    GenServer.call(via_tuple(server), {:accept_chain, player_id})
   end
 
   @doc """
   Interface for calling UNO.
   """
-  def uno(room_id, player_id) do
-    GenServer.call(via_tuple(room_id), {:uno, player_id})
+  def uno(server, player_id) do
+    GenServer.call(via_tuple(server), {:uno, player_id})
   end
 
   @doc """
@@ -114,8 +113,6 @@ defmodule Uno.Game.Server do
 
   @impl true
   def init({room_id, player_ids}) do
-    PubSub.subscribe(Uno.PubSub, "game:#{room_id}")
-
     initial_logic_state = Logic.init(player_ids)
 
     server_state = %{
@@ -194,13 +191,10 @@ defmodule Uno.Game.Server do
   def handle_call({:draw, player_id}, _from, state) do
     case draw_loop(state.logic_state, player_id, []) do
       {:ok, updated_logic, drawn_cards} ->
-        Enum.each(drawn_cards, fn card ->
-          PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:card_drawn, player_id, card})
-        end)
-
-        updated_state = %{state | logic_state: updated_logic}
-
-        {:reply, {:ok, drawn_cards}, updated_state}
+        new_hand = updated_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: updated_logic}
+        new_state = broadcast_cards_drawn(new_state, player_id, drawn_cards, new_hand)
+        {:reply, {:ok, drawn_cards}, new_state}
     end
   end
 
