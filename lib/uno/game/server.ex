@@ -7,7 +7,6 @@ defmodule Uno.Game.Server do
   Handles all client interactions and timing-related behaviours.
   """
 
-  alias Phoenix.PubSub
   alias Uno.Events
   alias Uno.Game.Logic
 
@@ -114,8 +113,6 @@ defmodule Uno.Game.Server do
 
   @impl true
   def init({room_id, player_ids}) do
-    PubSub.subscribe(Uno.PubSub, "game:#{room_id}")
-
     initial_logic_state = Logic.init(player_ids)
 
     server_state = %{
@@ -194,13 +191,10 @@ defmodule Uno.Game.Server do
   def handle_call({:draw, player_id}, _from, state) do
     case draw_loop(state.logic_state, player_id, []) do
       {:ok, updated_logic, drawn_cards} ->
-        Enum.each(drawn_cards, fn card ->
-          PubSub.broadcast(Uno.PubSub, "game:#{state.room_id}", {:card_drawn, player_id, card})
-        end)
-
-        updated_state = %{state | logic_state: updated_logic}
-
-        {:reply, {:ok, drawn_cards}, updated_state}
+        new_hand = updated_logic |> Logic.player_hands() |> Map.get(player_id, [])
+        new_state = %{state | logic_state: updated_logic}
+        new_state = broadcast_cards_drawn(new_state, player_id, drawn_cards, new_hand)
+        {:reply, {:ok, drawn_cards}, new_state}
     end
   end
 
@@ -208,16 +202,11 @@ defmodule Uno.Game.Server do
   def handle_call({:accept_chain, player_id}, _from, state) do
     case Logic.accept_chain(state.logic_state, player_id) do
       {:ok, updated_logic} ->
-        Enum.each(updated_logic.penalties, fn {affected_player_id, penalty_count} ->
-          PubSub.broadcast(
-            Uno.PubSub,
-            "game:#{state.room_id}",
-            {:penalty_assigned, affected_player_id, penalty_count}
-          )
-        end)
+        new_state =
+          %{state | logic_state: updated_logic, chain: updated_logic.chain}
+          |> resolve_pending_penalties()
 
-        updated_state = %{state | logic_state: updated_logic}
-        {:reply, :ok, updated_state}
+        {:reply, :ok, new_state}
 
       {:error, reason} ->
         {:reply, {:error, reason}, state}
